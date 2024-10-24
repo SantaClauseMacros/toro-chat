@@ -1,655 +1,235 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Toro Chat 🐂</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .toro-gradient {
-            background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
-        }
-        .message-hover {
-            transition: all 0.3s ease;
-        }
-        .message-hover:hover {
-            transform: translateY(-2px);
-        }
-        .emoji-picker {
-            position: absolute;
-            bottom: 100%;
-            right: 0;
-        }
-    </style>
+  <title>Toro Chat 🐂</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .toro-gradient { background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%); }
+    .message-hover { transition: all 0.3s ease; }
+    .message-hover:hover { transform: translateY(-2px); }
+    .emoji-picker { position: absolute; bottom: 100%; right: 0; }
+  </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    const ADMIN_USERNAME = 'Theo';
 
-        const ADMIN_USERNAME = 'Theo';
+    function App() {
+      // Core States
+      const [view, setView] = useState('welcome');
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [currentUser, setCurrentUser] = useState(null);
 
-        function App() {
-            // Core States
-            const [view, setView] = useState('welcome');
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
-            const [currentUser, setCurrentUser] = useState(null);
+      // Chat States
+      const [friends, setFriends] = useState([]);
+      const [chats, setChats] = useState([]);
+      const [activeChat, setActiveChat] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [newMessage, setNewMessage] = useState('');
+      const [searchQuery, setSearchQuery] = useState('');
+      const [searchResults, setSearchResults] = useState([]);
+      const [editingMessage, setEditingMessage] = useState(null);
+      const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+      const [attachment, setAttachment] = useState(null);
+      const fileInputRef = useRef();
+      const chatContainerRef = useRef();
 
-            // Chat States
-            const [friends, setFriends] = useState([]);
-            const [chats, setChats] = useState([]);
-            const [activeChat, setActiveChat] = useState(null);
-            const [messages, setMessages] = useState([]);
-            const [newMessage, setNewMessage] = useState('');
-            const [searchQuery, setSearchQuery] = useState('');
-            const [searchResults, setSearchResults] = useState([]);
-            const [editingMessage, setEditingMessage] = useState(null);
-            const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-            const [attachment, setAttachment] = useState(null);
-            const [chatName, setChatName] = useState('');
+      // Load saved data
+      useEffect(() => {
+        const savedUser = localStorage.getItem('currentUser');
+        if (savedUser) {
+          const user = JSON.parse(savedUser);
+          setCurrentUser(user);
+          loadUserData(user.id);
+          setView('chat');
+        }
+      }, []);
 
-            const fileInputRef = useRef();
-            const chatContainerRef = useRef();
+      // Auto scroll chat & refresh data
+      useEffect(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+        if (currentUser) {
+          const interval = setInterval(() => loadUserData(currentUser.id), 1000);
+          return () => clearInterval(interval);
+        }
+      }, [messages, currentUser]);
 
-            // Load saved data
-            useEffect(() => {
-                const savedUser = localStorage.getItem('currentUser');
-                if (savedUser) {
-                    const user = JSON.parse(savedUser);
-                    setCurrentUser(user);
-                    loadUserData(user.id);
-                    setView('chat');
-                }
-            }, []);
+      function loadUserData(userId) {
+        const savedFriends = localStorage.getItem(`friends_${userId}`);
+        if (savedFriends) setFriends(JSON.parse(savedFriends));
+        const savedChats = localStorage.getItem(`chats_${userId}`);
+        if (savedChats) setChats(JSON.parse(savedChats));
+        if (activeChat) {
+          const savedMessages = localStorage.getItem(`messages_${activeChat.id}`);
+          if (savedMessages) setMessages(JSON.parse(savedMessages));
+        }
+      }
 
-            // Auto scroll chat & refresh data
-            useEffect(() => {
-                if (chatContainerRef.current) {
-                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-                }
-                
-                if (currentUser) {
-                    const interval = setInterval(() => loadUserData(currentUser.id), 1000);
-                    return () => clearInterval(interval);
-                }
-            }, [messages, currentUser]);
+      function handleLogin(e) {
+        e.preventDefault();
+        const users = JSON.parse(localStorage.getItem('users') || '[]');
+        const user = users.find(u => u.username === username && u.password === password);
+        if (user) {
+          localStorage.setItem('currentUser', JSON.stringify(user));
+          setCurrentUser(user);
+          loadUserData(user.id);
+          setView('chat');
+        } else {
+          setError('Invalid username or password');
+        }
+      }
 
-            // Keyboard shortcuts
-            useEffect(() => {
-                const handleKeyPress = (e) => {
-                    if (e.ctrlKey) {
-                        if (e.key === 'e' && editingMessage) handleEditMessage(editingMessage);
-                        if (e.key === 'u' && editingMessage) handleUnsendMessage(editingMessage);
-                    }
-                };
-                window.addEventListener('keydown', handleKeyPress);
-                return () => window.removeEventListener('keydown', handleKeyPress);
-            }, [editingMessage]);
+      function handleSignup(e) {
+        e.preventDefault();
+        const users = JSON.parse(localStorage.getItem('users') || '[]');
+        if (users.some(u => u.username === username)) {
+          setError('Username already taken');
+          return;
+        }
+        const newUser = {
+          id: Date.now().toString(),
+          username,
+          password,
+          isAdmin: username === ADMIN_USERNAME,
+          createdAt: new Date().toISOString(),
+        };
+        users.push(newUser);
+        localStorage.setItem('users', JSON.stringify(users));
+        localStorage.setItem('currentUser', JSON.stringify(newUser));
+        localStorage.setItem(`friends_${newUser.id}`, '[]');
+        localStorage.setItem(`chats_${newUser.id}`, '[]');
+        setCurrentUser(newUser);
+        setView('chat');
+      }
 
-            function loadUserData(userId) {
-                // Load friends
-                const savedFriends = localStorage.getItem(`friends_${userId}`);
-                if (savedFriends) setFriends(JSON.parse(savedFriends));
+      function handleSearch(query) {
+        setSearchQuery(query);
+        if (!query.trim()) {
+          setSearchResults([]);
+          return;
+        }
+        const users = JSON.parse(localStorage.getItem('users') || '[]');
+        const results = users.filter(user => user.id !== currentUser.id && user.username.toLowerCase().includes(query.toLowerCase()));
+        setSearchResults(results);
+      }
 
-                // Load chats
-                const savedChats = localStorage.getItem(`chats_${userId}`);
-                if (savedChats) setChats(JSON.parse(savedChats));
+      function startChat(user) {
+        const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
+        const existingChat = chats.find(c => c.id === chatId);
+        if (!existingChat) {
+          const newChat = {
+            id: chatId,
+            name: `Chat with ${user.username}`,
+            participants: [currentUser.id, user.id],
+            createdAt: new Date().toISOString(),
+          };
+          const updatedChats = [...chats, newChat];
+          localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
+          setChats(updatedChats);
+          setActiveChat(newChat);
+        } else {
+          setActiveChat(existingChat);
+        }
+        setSearchQuery('');
+        setSearchResults([]);
+      }
 
-                // Load active chat messages
-                if (activeChat) {
-                    const savedMessages = localStorage.getItem(`messages_${activeChat.id}`);
-                    if (savedMessages) setMessages(JSON.parse(savedMessages));
-                }
-            }
+      function handleSendMessage(e) {
+        e.preventDefault();
+        if (!newMessage.trim() && !attachment || !activeChat) return;
 
-            function handleLogin(e) {
-                e.preventDefault();
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const user = users.find(u => u.username === username && u.password === password);
-                
-                if (user) {
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    setCurrentUser(user);
-                    loadUserData(user.id);
-                    setView('chat');
-                } else {
-                    setError('Invalid username or password');
-                }
-            }
-
-            function handleSignup(e) {
-                e.preventDefault();
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                
-                if (users.some(u => u.username === username)) {
-                    setError('Username already taken');
-                    return;
-                }
-
-                const newUser = {
-                    id: Date.now().toString(),
-                    username,
-                    password,
-                    isAdmin: username === ADMIN_USERNAME,
-                    createdAt: new Date().toISOString()
-                };
-
-                users.push(newUser);
-                localStorage.setItem('users', JSON.stringify(users));
-                localStorage.setItem('currentUser', JSON.stringify(newUser));
-                localStorage.setItem(`friends_${newUser.id}`, '[]');
-                localStorage.setItem(`chats_${newUser.id}`, '[]');
-
-                setCurrentUser(newUser);
-                setView('chat');
-            }
-
-            function handleSearch(query) {
-                setSearchQuery(query);
-                if (!query.trim()) {
-                    setSearchResults([]);
-                    return;
-                }
-
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const results = users.filter(user => 
-                    user.id !== currentUser.id && 
-                    user.username.toLowerCase().includes(query.toLowerCase())
-                );
-                setSearchResults(results);
-            }
-
-            function startChat(user) {
-                const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
-                const existingChat = chats.find(c => c.id === chatId);
-
-                if (!existingChat) {
-                    const newChat = {
-                        id: chatId,
-                        name: `Chat with ${user.username}`,
-                        participants: [currentUser.id, user.id],
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const updatedChats = [...chats, newChat];
-                    localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
-                    setChats(updatedChats);
-                    setActiveChat(newChat);
-                } else {
-                    setActiveChat(existingChat);
-                }
-
-                setSearchQuery('');
-                setSearchResults([]);
-            }
-
-            async function handleSendMessage(e) {
-                e.preventDefault();
-                if ((!newMessage.trim() && !attachment) || !activeChat) return;
-
-                let attachmentData = null;
-                if (attachment) {
-                    attachmentData = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => resolve({
-                            type: attachment.type,
-                            name: attachment.name,
-                            data: e.target.result
-                        });
-                        reader.readAsDataURL(attachment);
-                    });
-                }
-
-                const message = {
-                    id: Date.now().toString(),
-                    text: newMessage.trim(),
-                    sender: currentUser.id,
-                    attachment: attachmentData,
-                    timestamp: new Date().toISOString(),
-                    isEdited: false,
-                    isUnsent: false
-                };
-
-                const updatedMessages = [...messages, message];
-                localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-                setMessages(updatedMessages);
-                setNewMessage('');
-                setAttachment(null);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-            }
-
-            function handleEditMessage(message) {
-                setEditingMessage(message);
-                setNewMessage(message.text);
-            }
-
-            function handleSaveEdit() {
-                if (!editingMessage || !newMessage.trim()) return;
-
-                const updatedMessages = messages.map(msg =>
-                    msg.id === editingMessage.id
-                        ? { ...msg, text: newMessage, isEdited: true }
-                        : msg
-                );
-
-                localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-                setMessages(updatedMessages);
-                setEditingMessage(null);
-                setNewMessage('');
-            }
-
-            function handleUnsendMessage(message) {
-                const updatedMessages = messages.map(msg =>
-                    msg.id === message.id
-                        ? { ...msg, isUnsent: true }
-                        : msg
-                );
-
-                localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-                setMessages(updatedMessages);
-            }
-
-            function handleFileSelect(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                        setError('File size must be less than 5MB');
-                        return;
-                    }
-                    setAttachment(file);
-                }
-            }
-
-            function updateChatName(name) {
-                if (!activeChat) return;
-
-                const updatedChats = chats.map(chat =>
-                    chat.id === activeChat.id
-                        ? { ...chat, name }
-                        : chat
-                );
-
-                localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
-                setChats(updatedChats);
-                setActiveChat({ ...activeChat, name });
-                setChatName('');
-            }
-
-            // Welcome Screen
-            if (view === 'welcome') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-6xl mb-4">🐂</div>
-                                <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
-                                <p className="text-gray-500">Connect with friends</p>
-                            </div>
-
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
-                                >
-                                    Sign Up
-                                </button>
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50"
-                                >
-                                    Login
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Signup Screen
-            if (view === 'signup') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
-                                <p className="text-gray-500">Create your account</p>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-100 text-red-600 p-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
-
-                            <form onSubmit={handleSignup} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded"
-                                        placeholder="Choose a username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded"
-                                        placeholder="Create a password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    className="w-full bg-red-500 text-white p-3 rounded hover:bg-red-600"
-                                >
-                                    Create Account
-                                </button>
-                            </form>
-
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Already have an account? Login
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Login Screen
-            if (view === 'login') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
-                                <p className="text-gray-500">Login to your account</p>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-100 text-red-600 p-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
-
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded"
-                                        placeholder="Enter username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded"
-                                        placeholder="Enter password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    className="w-full bg-red-500 text-white p-3 rounded hover:bg-red-600"
-                                >
-                                    Login
-                                </button>
-                            </form>
-
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Need an account? Sign up
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Chat Screen
-            return (
-                <div className="h-screen flex">
-                    {/* Sidebar */}
-                    <div className="w-80 bg-white border-r flex flex-col">
-                        <div className="p-6 toro-gradient">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                    <span className="text-3xl">🐂</span>
-                                    <div>
-                                        <h1 className="text-white font-bold">Toro Chat</h1>
-                                        <p className="text-red-100 text-sm">@{currentUser?.username}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Search */}
-                        <div className="p-4">
-                            <input
-                                type="text"
-                                placeholder="Search users..."
-                                value={searchQuery}
-                                onChange={(e) => handleSearch(e.target.value)}
-                                className="w-full p-2 border rounded"
-                            />
-                            {searchResults.length > 0 && (
-                                <div className="mt-2 bg-white border rounded-lg shadow-lg p-2">
-                                    {searchResults.map(user => (
-                                        <button
-                                            key={user.id}
-                                            onClick={() => startChat(user)}
-                                            className="w-full p-2 text-left hover:bg-gray-50 rounded"
-                                        >
-                                            @{user.username}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Chats List */}
-                        <div className="flex-1 overflow-y-auto">
-                            {chats.map(chat => (
-                                <button
-                                    key={chat.id}
-                                    onClick={() => setActiveChat(chat)}
-                                    className={`w-full p-4 text-left hover:bg-gray-50 ${
-                                        activeChat?.id === chat.id ? 'bg-red-50' : ''
-                                    }`}
-                                >
-                                    <p className="font-medium">{chat.name}</p>
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Logout */}
-                        <button
-                            onClick={() => {
-                                localStorage.removeItem('currentUser');
-                                setView('welcome');
-                            }}
-                            className="p-4 text-red-500 hover:bg-red-50"
-                        >
-                            Logout
-                        </button>
-                    </div>
-
-                    {/* Chat Area */}
-                    {activeChat ? (
-                        <div className="flex-1 flex flex-col bg-gray-50">
-                            {/* Chat Header */}
-                            <div className="bg-white border-b p-4 flex items-center justify-between">
-                                <div>
-                                    <input
-                                        type="text"
-                                        placeholder={activeChat.name}
-                                        value={chatName}
-                                        onChange={(e) => setChatName(e.target.value)}
-                                        className="border rounded px-2 py-1"
-                                    />
-                                    <button
-                                        onClick={() => updateChatName(chatName)}
-                                        className="ml-2 text-red-500 hover:bg-red-50 px-2 py-1 rounded"
-                                    >
-                                        Rename
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Messages */}
-                            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {messages.map(message => (
-                                    <div
-                                        key={message.id}
-                                        className={`flex ${
-                                            message.sender === currentUser.id ? 'justify-end' : 'justify-start'
-                                        }`}
-                                    >
-                                        <div className="group relative">
-                                            <div className={`max-w-[70%] p-3 rounded-lg message-hover ${
-                                                message.sender === currentUser.id
-                                                    ? 'bg-red-500 text-white ml-auto'
-                                                    : 'bg-white'
-                                            }`}>
-                                                {!message.isUnsent ? (
-                                                    <>
-                                                        <p>{message.text}</p>
-                                                        {message.attachment && (
-                                                            <div className="mt-2">
-                                                                {message.attachment.type.startsWith('image/') ? (
-                                                                    <img 
-                                                                        src={message.attachment.data}
-                                                                        alt="attachment"
-                                                                        className="max-w-xs rounded"
-                                                                    />
-                                                                ) : (
-                                                                    <a 
-                                                                        href={message.attachment.data}
-                                                                        download={message.attachment.name}
-                                                                        className="text-blue-500 hover:underline"
-                                                                    >
-                                                                        📎 {message.attachment.name}
-                                                                    </a>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                        <p className="text-xs opacity-75 mt-1">
-                                                            {new Date(message.timestamp).toLocaleTimeString([], { 
-                                                                hour: '2-digit', 
-                                                                minute: '2-digit' 
-                                                            })}
-                                                            {message.isEdited && ' (edited)'}
-                                                        </p>
-                                                    </>
-                                                ) : (
-                                                    <p className="italic opacity-50">Message unsent</p>
-                                                )}
-                                            </div>
-                                            {message.sender === currentUser.id && !message.isUnsent && (
-                                                <div className="absolute right-0 top-0 hidden group-hover:block">
-                                                    <button
-                                                        onClick={() => handleEditMessage(message)}
-                                                        className="p-1 hover:bg-gray-100 rounded"
-                                                    >
-                                                        ✏️
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUnsendMessage(message)}
-                                                        className="p-1 hover:bg-gray-100 rounded"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Message Input */}
-                            <form onSubmit={editingMessage ? handleSaveEdit : handleSendMessage} className="bg-white border-t p-4">
-                                {attachment && (
-                                    <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">
-                                        <span>📎 {attachment.name}</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAttachment(null)}
-                                            className="text-red-500"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                )}
-                                <div className="flex space-x-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="p-2 hover:bg-gray-100 rounded"
-                                    >
-                                        📎
-                                    </button>
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        onChange={handleFileSelect}
-                                        className="hidden"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        placeholder={editingMessage ? "Edit message..." : "Type a message..."}
-                                        className="flex-1 p-2 border rounded"
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-                                    >
-                                        {editingMessage ? 'Save' : 'Send'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-500">
-                            <div className="text-center">
-                                <div className="text-6xl mb-4">🐂</div>
-                                <p>Select a chat or search for users to start messaging</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
+        let attachmentData = null;
+        if (attachment) {
+          attachmentData = {
+            type: attachment.type,
+            name: attachment.name,
+            data: URL.createObjectURL(attachment),
+          };
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
+        const message = {
+          id: Date.now().toString(),
+          text: newMessage.trim(),
+          sender: currentUser.id,
+          attachment: attachmentData,
+          timestamp: new Date().toISOString(),
+          isEdited: false,
+          isUnsent: false,
+        };
+
+        const updatedMessages = [...messages, message];
+        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+        setMessages(updatedMessages);
+        setNewMessage('');
+        setAttachment(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+
+      function handleEditMessage(message) {
+        const updatedMessages = messages.map(m =>
+          m.id === message.id ? { ...m, text: newMessage, isEdited: true } : m
+        );
+        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+        setMessages(updatedMessages);
+        setEditingMessage(null);
+        setNewMessage('');
+      }
+
+      function handleUnsendMessage(message) {
+        const updatedMessages = messages.map(m =>
+          m.id === message.id ? { ...m, isUnsent: true } : m
+        );
+        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+        setMessages(updatedMessages);
+      }
+
+      return (
+        <div className="min-h-screen toro-gradient flex items-center justify-center">
+          {view === 'welcome' ? (
+            <div>
+              <h1 className="text-4xl font-bold text-white">Welcome to Toro Chat 🐂</h1>
+              <form onSubmit={handleLogin} className="mt-4">
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="p-2 rounded"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="p-2 rounded ml-2"
+                />
+                <button type="submit" className="ml-2 p-2 bg-white rounded">Login</button>
+                <button onClick={handleSignup} className="ml-2 p-2 bg-white rounded">Signup</button>
+              </form>
+              {error && <p className="text-red-500 mt-2">{error}</p>}
+            </div>
+          ) : (
+            <div className="chat-container">
+              {/* Chat UI */}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
 </body>
 </html>
