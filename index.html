@@ -148,7 +148,7 @@
 
       function handleSendMessage(e) {
         e.preventDefault();
-        if (!newMessage.trim() && !attachment || !activeChat) return;
+        if ((!newMessage.trim() && !attachment) || !activeChat) return;
 
         let attachmentData = null;
         if (attachment) {
@@ -198,31 +198,140 @@
       return (
         <div className="min-h-screen toro-gradient flex items-center justify-center">
           {view === 'welcome' ? (
-            <div>
-              <h1 className="text-4xl font-bold text-white">Welcome to Toro Chat 🐂</h1>
-              <form onSubmit={handleLogin} className="mt-4">
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h1 className="text-4xl font-bold text-black">Welcome to Toro Chat 🐂</h1>
+              <form onSubmit={handleLogin} className="mt-4 space-y-4">
                 <input
                   type="text"
                   placeholder="Username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="p-2 rounded"
+                  className="w-full p-2 rounded border"
                 />
                 <input
                   type="password"
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="p-2 rounded ml-2"
+                  className="w-full p-2 rounded border"
                 />
-                <button type="submit" className="ml-2 p-2 bg-white rounded">Login</button>
-                <button onClick={handleSignup} className="ml-2 p-2 bg-white rounded">Signup</button>
+                <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded">Login</button>
+                <button onClick={handleSignup} className="w-full p-2 bg-green-500 text-white rounded">Signup</button>
               </form>
               {error && <p className="text-red-500 mt-2">{error}</p>}
             </div>
           ) : (
-            <div className="chat-container">
-              {/* Chat UI */}
+            <div className="flex flex-col bg-white w-full max-w-4xl rounded-lg shadow-lg overflow-hidden">
+              <header className="bg-gray-800 text-white p-4">
+                <h2 className="text-xl">{currentUser.username}</h2>
+              </header>
+              <div className="flex flex-grow">
+                <aside className="w-1/3 bg-gray-100 p-2">
+                  <div className="mb-4">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => handleSearch(e.target.value)}
+                      placeholder="Search users..."
+                      className="w-full p-2 rounded"
+                    />
+                    {searchResults.map((result) => (
+                      <div
+                        key={result.id}
+                        className="p-2 bg-white rounded shadow mt-2 cursor-pointer"
+                        onClick={() => startChat(result)}
+                      >
+                        {result.username}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    {chats.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className={`p-2 rounded mt-2 cursor-pointer ${
+                          activeChat?.id === chat.id ? 'bg-blue-500 text-white' : 'bg-white'
+                        }`}
+                        onClick={() => setActiveChat(chat)}
+                      >
+                        {chat.name}
+                      </div>
+                    ))}
+                  </div>
+                </aside>
+                <main className="w-2/3 flex flex-col">
+                  <div className="flex-grow p-4 overflow-y-auto" ref={chatContainerRef}>
+                    {messages.map((msg) => (
+                      <div key={msg.id} className="mb-2">
+                        {msg.isUnsent ? (
+                          <p className="italic text-gray-500">Message unsent</p>
+                        ) : (
+                          <div className={`p-2 rounded ${msg.sender === currentUser.id ? 'bg-blue-200' : 'bg-gray-200'}`}>
+                            {msg.attachment && (
+                              <div className="mb-2">
+                                <a
+                                  href={msg.attachment.data}
+                                  download={msg.attachment.name}
+                                  className="underline text-blue-500"
+                                >
+                                  {msg.attachment.name}
+                                </a>
+                              </div>
+                            )}
+                            <p>{msg.text}</p>
+                            {msg.isEdited && <span className="text-xs text-gray-600">(Edited)</span>}
+                            <div className="text-xs text-gray-500">
+                              {new Date(msg.timestamp).toLocaleTimeString()}
+                              {msg.sender === currentUser.id && (
+                                <>
+                                  <button
+                                    className="ml-2 text-blue-500"
+                                    onClick={() => {
+                                      setEditingMessage(msg);
+                                      setNewMessage(msg.text);
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="ml-2 text-red-500"
+                                    onClick={() => handleUnsendMessage(msg)}
+                                  >
+                                    Unsend
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <form onSubmit={handleSendMessage} className="p-4 bg-gray-100 flex">
+                    <input
+                      type="text"
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="flex-grow p-2 rounded"
+                    />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => setAttachment(e.target.files[0])}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current.click()}
+                      className="ml-2 p-2 bg-gray-300 rounded"
+                    >
+                      📎
+                    </button>
+                    <button type="submit" className="ml-2 p-2 bg-blue-500 text-white rounded">Send</button>
+                  </form>
+                </main>
+              </div>
             </div>
           )}
         </div>
