@@ -4,14 +4,20 @@
     <title>Toro Chat 🐂</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/data"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/emoji-picker-element/1.18.3/index.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
         
-        body { font-family: 'Poppins', sans-serif; }
+        body { 
+            font-family: 'Poppins', sans-serif;
+            background: #f7f7f7;
+        }
         
         .toro-gradient {
             background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
@@ -24,498 +30,929 @@
         .message-bubble:hover {
             transform: translateY(-2px);
         }
+
+        .emoji-mart {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            z-index: 50;
+        }
+
+        .message-actions {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .message-container:hover .message-actions {
+            opacity: 1;
+        }
+
+        .dropdown-menu {
+            transform-origin: top right;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80% { content: ''; }
+        }
+
+        .attachment-preview {
+            max-width: 200px;
+            max-height: 200px;
+            object-fit: contain;
+        }
+
+        .search-results {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #FF4B2B;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF416C;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect } = React;
+    // React Hooks
+    const { useState, useEffect, useRef } = React;
 
-        function App() {
-            const [view, setView] = useState('welcome');
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [confirmPassword, setConfirmPassword] = useState('');
-            const [currentUser, setCurrentUser] = useState(null);
-            const [error, setError] = useState('');
-            const [loading, setLoading] = useState(false);
-            
-            // Friend and chat state
-            const [friends, setFriends] = useState([]);
-            const [activeChat, setActiveChat] = useState(null);
-            const [newFriendUsername, setNewFriendUsername] = useState('');
-            const [messages, setMessages] = useState([]);
-            const [newMessage, setNewMessage] = useState('');
+    // Constants
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    const SUPPORTED_FILE_TYPES = [
+        'image/jpeg', 
+        'image/png', 
+        'image/gif',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const ADMIN_USERNAME = 'Theo';
 
-            // Load current user and their friends
-            useEffect(() => {
-                const savedUser = localStorage.getItem('currentUser');
-                if (savedUser) {
-                    const user = JSON.parse(savedUser);
-                    setCurrentUser(user);
-                    loadFriends(user.id);
-                    setView('chat');
-                }
-            }, []);
+    // Utility Functions
+    const formatTime = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
 
-            // Load messages when active chat changes
-            useEffect(() => {
-                if (activeChat) {
-                    loadMessages(activeChat);
-                    const interval = setInterval(() => loadMessages(activeChat), 1000);
-                    return () => clearInterval(interval);
-                }
-            }, [activeChat]);
+    const generateChatId = (user1, user2) => {
+        return [user1, user2].sort().join('_');
+    };
 
-            function loadFriends(userId) {
-                const savedFriends = localStorage.getItem(`friends_${userId}`);
-                if (savedFriends) {
-                    setFriends(JSON.parse(savedFriends));
-                }
+    const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    // Main App Component
+    function App() {
+        // State variables
+        const [view, setView] = useState('welcome');
+        const [username, setUsername] = useState('');
+        const [password, setPassword] = useState('');
+        const [confirmPassword, setConfirmPassword] = useState('');
+        const [currentUser, setCurrentUser] = useState(null);
+        const [error, setError] = useState('');
+        const [loading, setLoading] = useState(false);
+        
+        // Chat related state
+        const [chats, setChats] = useState([]);
+        const [activeChat, setActiveChat] = useState(null);
+        const [messages, setMessages] = useState([]);
+        const [newMessage, setNewMessage] = useState('');
+        const [editingMessage, setEditingMessage] = useState(null);
+        const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+        const [attachments, setAttachments] = useState([]);
+        const [searchQuery, setSearchQuery] = useState('');
+        const [searchResults, setSearchResults] = useState([]);
+        const [showSettings, setShowSettings] = useState(false);
+        const [chatName, setChatName] = useState('');
+
+        // Refs
+        const messageInputRef = useRef(null);
+        const fileInputRef = useRef(null);
+        const chatContainerRef = useRef(null);
+
+        // Load initial data
+        useEffect(() => {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                setCurrentUser(user);
+                loadChats(user);
+                setView('chat');
             }
+        }, []);
 
-            function loadMessages(chatId) {
-                const savedMessages = localStorage.getItem(`chat_${chatId}`);
-                if (savedMessages) {
-                    setMessages(JSON.parse(savedMessages));
+        // Handle keyboard shortcuts
+        useEffect(() => {
+            const handleKeyPress = (e) => {
+                if (e.ctrlKey) {
+                    if (e.key === 'e' && editingMessage) {
+                        handleEditMessage(editingMessage);
+                    } else if (e.key === 'u' && editingMessage) {
+                        handleUnsendMessage(editingMessage);
+                    }
                 }
+            };
+
+            window.addEventListener('keydown', handleKeyPress);
+            return () => window.removeEventListener('keydown', handleKeyPress);
+        }, [editingMessage]);
+
+        // Auto scroll to bottom of chat
+        useEffect(() => {
+            if (chatContainerRef.current) {
+                chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
             }
+        }, [messages]);
 
-            function handleSignup(e) {
-                e.preventDefault();
-                setLoading(true);
-                setError('');
+        // Load chats periodically
+        useEffect(() => {
+            if (currentUser) {
+                const interval = setInterval(() => {
+                    loadChats(currentUser);
+                    if (activeChat) {
+                        loadMessages(activeChat.id);
+                    }
+                }, 1000);
+                return () => clearInterval(interval);
+            }
+        }, [currentUser, activeChat]);
 
+        function loadChats(user) {
+            const savedChats = localStorage.getItem(`chats_${user.id}`);
+            if (savedChats) {
+                setChats(JSON.parse(savedChats));
+            }
+        }
+
+        function loadMessages(chatId) {
+            const savedMessages = localStorage.getItem(`messages_${chatId}`);
+            if (savedMessages) {
+                setMessages(JSON.parse(savedMessages));
+            }
+        }
+
+        async function handleSignup(e) {
+            e.preventDefault();
+            setLoading(true);
+            setError('');
+
+            try {
                 if (password !== confirmPassword) {
-                    setError('Passwords do not match');
-                    setLoading(false);
-                    return;
+                    throw new Error('Passwords do not match');
                 }
 
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
                 
                 if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                    setError('Username already taken');
-                    setLoading(false);
-                    return;
+                    throw new Error('Username already taken');
                 }
 
                 const newUser = {
                     id: Date.now().toString(),
                     username,
                     password,
+                    isAdmin: username === ADMIN_USERNAME,
                     createdAt: new Date().toISOString()
                 };
 
                 users.push(newUser);
                 localStorage.setItem('users', JSON.stringify(users));
                 localStorage.setItem('currentUser', JSON.stringify(newUser));
-                localStorage.setItem(`friends_${newUser.id}`, '[]');
                 
                 setCurrentUser(newUser);
-                setFriends([]);
-                setLoading(false);
                 setView('chat');
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
             }
+        }
 
-            function handleLogin(e) {
-                e.preventDefault();
-                setLoading(true);
-                setError('');
+        async function handleLogin(e) {
+            e.preventDefault();
+            setLoading(true);
+            setError('');
 
+            try {
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
                 const user = users.find(u => u.username === username && u.password === password);
                 
-                if (user) {
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    setCurrentUser(user);
-                    loadFriends(user.id);
-                    setView('chat');
-                } else {
-                    setError('Invalid username or password');
+                if (!user) {
+                    throw new Error('Invalid username or password');
                 }
+
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                setCurrentUser(user);
+                loadChats(user);
+                setView('chat');
+            } catch (err) {
+                setError(err.message);
+            } finally {
                 setLoading(false);
             }
+        }
 
-            function handleAddFriend(e) {
-                e.preventDefault();
-                if (!newFriendUsername.trim()) return;
+        function handleSearch(value) {
+            setSearchQuery(value);
+            if (!value.trim()) {
+                setSearchResults([]);
+                return;
+            }
 
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const friend = users.find(u => u.username.toLowerCase() === newFriendUsername.toLowerCase());
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const results = users.filter(user => 
+                user.id !== currentUser.id &&
+                user.username.toLowerCase().includes(value.toLowerCase())
+            );
+            setSearchResults(results);
+        }
 
-                if (!friend) {
-                    setError('User not found');
-                    return;
-                }
+        async function handleStartChat(user) {
+            const chatId = generateChatId(currentUser.id, user.id);
+            const existingChat = chats.find(c => c.id === chatId);
 
-                if (friend.id === currentUser.id) {
-                    setError('Cannot add yourself as friend');
-                    return;
-                }
-
-                const currentFriends = JSON.parse(localStorage.getItem(`friends_${currentUser.id}`) || '[]');
-                if (currentFriends.some(f => f.id === friend.id)) {
-                    setError('Already friends with this user');
-                    return;
-                }
-
-                // Create chat ID for these two users
-                const chatId = `chat_${currentUser.id}_${friend.id}`;
-                
-                // Add friend to current user's friends list
-                const newFriend = {
-                    id: friend.id,
-                    username: friend.username,
-                    chatId
+            if (!existingChat) {
+                const newChat = {
+                    id: chatId,
+                    participants: [currentUser.id, user.id],
+                    name: `Chat with ${user.username}`,
+                    createdAt: new Date().toISOString()
                 };
-                
-                currentFriends.push(newFriend);
-                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(currentFriends));
-                
-                // Add current user to friend's friends list
-                const friendsFriends = JSON.parse(localStorage.getItem(`friends_${friend.id}`) || '[]');
-                friendsFriends.push({
-                    id: currentUser.id,
-                    username: currentUser.username,
-                    chatId
+
+                const updatedChats = [...chats, newChat];
+                localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
+                setChats(updatedChats);
+                setActiveChat(newChat);
+            } else {
+                setActiveChat(existingChat);
+            }
+
+            setSearchQuery('');
+            setSearchResults([]);
+        }
+
+        async function handleSendMessage(e) {
+            e.preventDefault();
+            if ((!newMessage.trim() && attachments.length === 0) || !activeChat) return;
+
+            const message = {
+                id: Date.now().toString(),
+                text: newMessage.trim(),
+                sender: currentUser.id,
+                attachments: attachments,
+                timestamp: new Date().toISOString(),
+                isEdited: false,
+                isUnsent: false
+            };
+
+            const updatedMessages = [...messages, message];
+            localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+            setMessages(updatedMessages);
+            setNewMessage('');
+            setAttachments([]);
+        }
+
+        async function handleFileSelect(e) {
+            const files = Array.from(e.target.files);
+            const validFiles = [];
+
+            for (const file of files) {
+                if (file.size > MAX_FILE_SIZE) {
+                    setError(`File ${file.name} is too large. Maximum size is 5MB`);
+                    continue;
+                }
+
+                if (!SUPPORTED_FILE_TYPES.includes(file.type)) {
+                    setError(`File type ${file.type} is not supported`);
+                    continue;
+                }
+
+                const base64 = await fileToBase64(file);
+                validFiles.push({
+                    name: file.name,
+                    type: file.type,
+                    data: base64
                 });
-                localStorage.setItem(`friends_${friend.id}`, JSON.stringify(friendsFriends));
-                
-                // Initialize empty chat
-                localStorage.setItem(`chat_${chatId}`, '[]');
-                
-                setFriends(currentFriends);
-                setNewFriendUsername('');
-                setError('');
             }
 
-            function handleSendMessage(e) {
-                e.preventDefault();
-                if (!newMessage.trim() || !activeChat) return;
+            setAttachments([...attachments, ...validFiles]);
+            e.target.value = null;
+        }
 
-                const message = {
-                    id: Date.now().toString(),
-                    text: newMessage,
-                    sender: currentUser.username,
-                    senderId: currentUser.id,
-                    timestamp: new Date().toISOString()
-                };
+        function handleEditMessage(message) {
+            if (message.sender !== currentUser.id) return;
+            
+            setEditingMessage(message);
+            setNewMessage(message.text);
+            messageInputRef.current?.focus();
+        }
 
-                const chatMessages = JSON.parse(localStorage.getItem(`chat_${activeChat}`) || '[]');
-                chatMessages.push(message);
-                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(chatMessages));
-                
-                setMessages(chatMessages);
-                setNewMessage('');
-            }
+        function handleSaveEdit() {
+            if (!editingMessage || !newMessage.trim()) return;
 
-            function handleLogout() {
-                localStorage.removeItem('currentUser');
-                setCurrentUser(null);
-                setFriends([]);
-                setActiveChat(null);
-                setMessages([]);
-                setView('welcome');
-                setUsername('');
-                setPassword('');
-                setError('');
-            }
+            const updatedMessages = messages.map(msg => 
+                msg.id === editingMessage.id 
+                    ? { ...msg, text: newMessage, isEdited: true }
+                    : msg
+            );
 
-            // Welcome Screen
-            if (view === 'welcome') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-6xl mb-4 animate-bounce">🐂</div>
-                                <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
-                                <p className="text-gray-500">Private messaging unleashed</p>
-                            </div>
+            localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+            setMessages(updatedMessages);
+            setEditingMessage(null);
+            setNewMessage('');
+        }
 
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 transition-colors"
-                                >
-                                    Sign Up
-                                </button>
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50 transition-colors"
-                                >
-                                    Login
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+        function handleUnsendMessage(message) {
+            if (message.sender !== currentUser.id) return;
 
-            // Signup Screen
-            if (view === 'signup') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
-                                <p className="text-gray-500">Create your account</p>
-                            </div>
+            const updatedMessages = messages.map(msg =>
+                msg.id === message.id
+                    ? { ...msg, isUnsent: true }
+                    : msg
+            );
 
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
+            localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
+            setMessages(updatedMessages);
+        }
 
-                            <form onSubmit={handleSignup} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Choose a username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Create a password"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Confirm Password</label>
-                                    <input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Confirm your password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
-                                >
-                                    {loading ? 'Creating Account...' : 'Create Account'}
-                                </button>
-                            </form>
+        function handleUpdateProfile(newUsername, newPassword) {
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const updatedUsers = users.map(user => 
+                user.id === currentUser.id
+                    ? { ...user, username: newUsername || user.username, password: newPassword || user.password }
+                    : user
+            );
 
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Already have an account? Login
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+            const updatedUser = { ...currentUser, username: newUsername || currentUser.username };
+            
+            localStorage.setItem('users', JSON.stringify(updatedUsers));
+            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+            setShowSettings(false);
+        }
 
-            // Login Screen
-            if (view === 'login') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
-                                <p className="text-gray-500">Login to your account</p>
-                            </div>
+        function handleUpdateChatName(name) {
+            if (!activeChat) return;
 
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
+            const updatedChats = chats.map(chat =>
+                chat.id === activeChat.id
+                    ? { ...chat, name }
+                    : chat
+            );
 
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
-                                >
-                                    {loading ? 'Logging in...' : 'Login'}
-                                </button>
-                            </form>
+            localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
+            setChats(updatedChats);
+            setActiveChat({ ...activeChat, name });
+            setChatName('');
+        }
 
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Need an account? Sign up
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Chat Screen
+// Welcome Screen Component
+        function WelcomeScreen() {
             return (
-                <div className="h-screen flex">
-                    {/* Friends Sidebar */}
-                    <div className="w-64 bg-white border-r flex flex-col">
-                        <div className="p-4 toro-gradient text-white">
-                            <div className="flex items-center space-x-2">
-                                <span className="text-2xl">🐂</span>
-                                <h1 className="font-bold">Toro Chat</h1>
-                            </div>
-                            <p className="text-sm mt-2">@{currentUser?.username}</p>
+                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-6xl mb-4 animate-bounce">🐂</div>
+                            <h1 className="text-4xl font-bold text-red-600 mb-2">
+                                TORO CHAT
+                            </h1>
+                            <p className="text-gray-500">Private messaging unleashed</p>
                         </div>
 
-                        {/* Add Friend Form */}
-                        <div className="p-4 border-b">
-                            <form onSubmit={handleAddFriend}>
-                                <input
-                                    type="text"
-                                    value={newFriendUsername}
-                                    onChange={(e) => setNewFriendUsername(e.target.value)}
-                                    placeholder="Add friend by username"
-                                    className="w-full p-2 border rounded-lg text-sm"
-                                />
-                                <button
-                                    type="submit"
-                                    className="w-full mt-2 bg-red-500 text-white p-2 rounded-lg text-sm hover:bg-red-600"
-                                >
-                                    Add Friend
-                                </button>
-                            </form>
-                            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
-                        </div>
-
-                        {/* Friends List */}
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <h2 className="text-sm font-semibold text-gray-500 mb-4">Friends</h2>
-                            {friends.map(friend => (
-                                <button
-                                    key={friend.id}
-                                    onClick={() => setActiveChat(friend.chatId)}
-                                    className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 ${
-                                        friend.chatId === activeChat ? 'bg-red-50' : ''
-                                    }`}
-                                >
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                                            <span className="text-sm">🐂</span>
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">@{friend.username}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Logout */}
-                        <div className="p-4 border-t">
+                        <div className="space-y-4">
                             <button
-                                onClick={handleLogout}
-                                className="w-full text-red-500 hover:text-red-600"
+                                onClick={() => setView('signup')}
+                                className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 transition-colors"
                             >
-                                Logout
+                                Sign Up
+                            </button>
+                            <button
+                                onClick={() => setView('login')}
+                                className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                                Login
                             </button>
                         </div>
-                    </div>
-
-                    {/* Chat Area */}
-                    <div className="flex-1 flex flex-col bg-gray-50">
-                        {activeChat ? (
-                            <>
-                                {/* Messages */}
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {messages.map(message => (
-                                        <div
-                                            key={message.id}
-                                            className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
-                                        >
-                                            <div
-                                                className={`message-bubble max-w-[70%] p-3 rounded-lg ${
-                                                    message.senderId === currentUser.id
-                                                        ? 'bg-red-500 text-white'
-                                                        : 'bg-white shadow'
-                                                }`}
-                                            >
-                                                <p className="font-bold text-sm mb-1">@{message.sender}</p>
-                                                <p className="break-words">{message.text}</p>
-                                                <p className="text-xs opacity-75 mt-1">
-                                                    {new Date(message.timestamp).toLocaleTimeString()}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Message Input */}
-                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                                    <div className="flex space-x-2">
-                                        <input
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
-                                            placeholder="Type a message..."
-                                            className="flex-1 p-2 border rounded-full focus:ring-2 focus:ring-red-500"
-                                        />
-                                        <button
-                                            type="submit"
-                                            className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 flex items-center space-x-2"
-                                        >
-                                            <span>Send</span>
-                                            <span>⚡</span>
-                                        </button>
-                                    </div>
-                                </form>
-                            </>
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-500">
-                                <div className="text-center">
-                                    <div className="text-6xl mb-4">🐂</div>
-                                    <p>Select a friend to start chatting</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             );
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        // Chat Interface Component
+        function ChatInterface() {
+            return (
+                <div className="h-screen flex">
+                    {/* Sidebar */}
+                    <div className="w-80 bg-white border-r flex flex-col">
+                        <div className="p-6 toro-gradient">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-3xl">🐂</span>
+                                    <div>
+                                        <h1 className="text-white font-bold">Toro Chat</h1>
+                                        <p className="text-red-100 text-sm">@{currentUser?.username}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowSettings(true)}
+                                    className="text-white hover:bg-white/20 p-2 rounded-full"
+                                >
+                                    ⚙️
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="p-4">
+                            <input
+                                type="text"
+                                placeholder="Search users..."
+                                value={searchQuery}
+                                onChange={(e) => handleSearch(e.target.value)}
+                                className="w-full p-2 border rounded-lg"
+                            />
+                            {searchResults.length > 0 && (
+                                <div className="absolute mt-2 w-72 bg-white rounded-lg shadow-lg border p-2 z-50">
+                                    {searchResults.map(user => (
+                                        <button
+                                            key={user.id}
+                                            onClick={() => handleStartChat(user)}
+                                            className="w-full p-2 text-left hover:bg-gray-50 rounded-lg"
+                                        >
+                                            @{user.username}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Chats List */}
+                        <div className="flex-1 overflow-y-auto">
+                            {chats.map(chat => (
+                                <button
+                                    key={chat.id}
+                                    onClick={() => setActiveChat(chat)}
+                                    className={`w-full p-4 text-left hover:bg-gray-50 ${
+                                        activeChat?.id === chat.id ? 'bg-red-50' : ''
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-medium">{chat.name}</span>
+                                        <span className="text-xs text-gray-500">
+                                            {formatTime(chat.lastMessage?.timestamp)}
+                                        </span>
+                                    </div>
+                                    {chat.lastMessage && (
+                                        <p className="text-sm text-gray-500 truncate">
+                                            {chat.lastMessage.isUnsent 
+                                                ? 'Message unsent'
+                                                : chat.lastMessage.text}
+                                        </p>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Logout Button */}
+                        <button
+                            onClick={handleLogout}
+                            className="p-4 text-red-500 hover:bg-red-50"
+                        >
+                            Logout
+                        </button>
+                    </div>
+
+                    {/* Chat Area */}
+                    {activeChat ? (
+                        <div className="flex-1 flex flex-col">
+                            {/* Chat Header */}
+                            <div className="bg-white border-b p-4 flex items-center justify-between">
+                                <div>
+                                    <h2 className="font-bold">{activeChat.name}</h2>
+                                    <p className="text-sm text-gray-500">
+                                        {activeChat.participants.length} participants
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Rename chat"
+                                        value={chatName}
+                                        onChange={(e) => setChatName(e.target.value)}
+                                        className="border rounded p-1 text-sm"
+                                    />
+                                    <button
+                                        onClick={() => handleUpdateChatName(chatName)}
+                                        className="text-red-500 hover:bg-red-50 p-2 rounded"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Messages */}
+                            <div 
+                                ref={chatContainerRef}
+                                className="flex-1 overflow-y-auto p-4 space-y-4"
+                            >
+                                {messages.map(message => (
+                                    <div
+                                        key={message.id}
+                                        className={`flex ${
+                                            message.sender === currentUser.id 
+                                                ? 'justify-end' 
+                                                : 'justify-start'
+                                        }`}
+                                    >
+                                        <div className="relative group">
+                                            {message.sender === currentUser.id && !message.isUnsent && (
+                                                <div className="absolute -right-8 top-0 opacity-0 group-hover:opacity-100">
+                                                    <button
+                                                        onClick={() => setShowMessageMenu(message.id)}
+                                                        className="p-1 hover:bg-gray-100 rounded"
+                                                    >
+                                                        •••
+                                                    </button>
+                                                    {showMessageMenu === message.id && (
+                                                        <div className="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border p-2 z-50">
+                                                            <button
+                                                                onClick={() => handleEditMessage(message)}
+                                                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUnsendMessage(message)}
+                                                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded text-red-500"
+                                                            >
+                                                                Unsend
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            <div
+                                                className={`max-w-[70%] p-3 rounded-lg ${
+                                                    message.sender === currentUser.id
+                                                        ? 'bg-red-500 text-white ml-auto'
+                                                        : 'bg-gray-100'
+                                                } ${
+                                                    message.isUnsent ? 'opacity-50 italic' : ''
+                                                }`}
+                                            >
+                                                {message.isUnsent ? (
+                                                    <p>Message unsent</p>
+                                                ) : (
+                                                    <>
+                                                        <p>{message.text}</p>
+                                                        {message.attachments?.map((attachment, index) => (
+                                                            <div key={index} className="mt-2">
+                                                                {attachment.type.startsWith('image/') ? (
+                                                                    <img 
+                                                                        src={attachment.data} 
+                                                                        alt="attachment"
+                                                                        className="max-w-xs rounded"
+                                                                    />
+                                                                ) : (
+                                                                    <a 
+                                                                        href={attachment.data}
+                                                                        download={attachment.name}
+                                                                        className="text-blue-500 hover:underline"
+                                                                    >
+                                                                        📎 {attachment.name}
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                        <div className="text-xs opacity-75 mt-1">
+                                                            {formatTime(message.timestamp)}
+                                                            {message.isEdited && ' (edited)'}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Message Input */}
+                            <div className="p-4 bg-white border-t">
+                                {attachments.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {attachments.map((file, index) => (
+                                            <div 
+                                                key={index}
+                                                className="relative bg-gray-100 p-2 rounded"
+                                            >
+                                                <button
+                                                    onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                                                >
+                                                    ×
+                                                </button>
+                                                {file.type.startsWith('image/') ? (
+                                                    <img 
+                                                        src={file.data} 
+                                                        alt="preview"
+                                                        className="w-20 h-20 object-cover rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="text-sm">
+                                                        📎 {file.name}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                    >
+                                        📎
+                                    </button>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                        multiple
+                                        className="hidden"
+                                    />
+                                    
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                    >
+                                        😊
+                                    </button>
+                                    
+                                    <input
+                                        type="text"
+                                        ref={messageInputRef}
+                                        value={newMessage}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        placeholder={editingMessage ? "Edit message..." : "Type a message..."}
+                                        className="flex-1 p-2 border rounded-full focus:ring-2 focus:ring-red-500"
+                                    />
+                                    
+                                    <button
+                                        type="submit"
+                                        className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600"
+                                    >
+                                        {editingMessage ? 'Save' : 'Send'}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-gray-500">
+                            <div className="text-center">
+                                <div className="text-6xl mb-4">🐂</div>
+                                <p>Select a chat or start a new conversation</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Settings Modal
+        function SettingsModal() {
+            const [newUsername, setNewUsername] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-96">
+                        <h2 className="text-2xl font-bold mb-4">Settings</h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-gray-700 mb-2">New Username</label>
+                                <input
+                                    type="text"
+                                    value={newUsername}
+                                    onChange={(e) => setNewUsername(e.target.value)}
+                                    className="w-full p-2 border rounded"
+                                    placeholder="Enter new username"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-gray-700 mb-2">New Password</label>
+                                <input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className="w-full p-2 border rounded"
+                                    placeholder="Enter new password"
+                                />
+                            </div>
+                            
+                            <div className="flex justify-end space-x-2">
+                                <button
+                                    onClick={() => setShowSettings(false)}
+                                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleUpdateProfile(newUsername, newPassword)}
+                                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main Render
+        // Main Render
+        if (view === 'welcome') {
+            return <WelcomeScreen />;
+        }
+
+        if (view === 'signup') {
+            return (
+                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-5xl mb-4">🐂</div>
+                            <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
+                            <p className="text-gray-500">Create your account</p>
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                {error}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSignup} className="space-y-4">
+                            <div>
+                                <label className="block text-gray-700 mb-2">Username</label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
+                                    placeholder="Choose a username"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-700 mb-2">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
+                                    placeholder="Create a password"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-700 mb-2">Confirm Password</label>
+                                <input
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
+                                    placeholder="Confirm your password"
+                                    required
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
+                            >
+                                {loading ? 'Creating Account...' : 'Create Account'}
+                            </button>
+                        </form>
+
+                        <div className="mt-6 text-center">
+                            <button
+                                onClick={() => setView('login')}
+                                className="text-red-500 hover:text-red-600"
+                            >
+                                Already have an account? Login
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (view === 'login') {
+            return (
+                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-5xl mb-4">🐂</div>
+                            <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
+                            <p className="text-gray-500">Login to your account</p>
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                {error}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            <div>
+                                <label className="block text-gray-700 mb-2">Username</label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
+                                    placeholder="Enter username"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-700 mb-2">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
+                                    placeholder="Enter password"
+                                    required
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
+                            >
+                                {loading ? 'Logging in...' : 'Login'}
+                            </button>
+                        </form>
+
+                        <div className="mt-6 text-center">
+                            <button
+                                onClick={() => setView('signup')}
+                                className="text-red-500 hover:text-red-600"
+                            >
+                                Need an account? Sign up
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <>
+                <ChatInterface />
+                {showSettings && <SettingsModal />}
+            </>
+        );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
 </html>
