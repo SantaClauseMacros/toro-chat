@@ -59,7 +59,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         
-        // GitHub configuration - REPLACE THESE!
+        // GitHub configuration
         const GITHUB_USERNAME = 'SantaClauseMacros';
         const REPO_NAME = 'toro-chat';
         const GITHUB_TOKEN = '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';
@@ -104,13 +104,29 @@
                 }
 
                 try {
-                    const users = await fetchUsers();
-                    if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    // First, check if we can access users.json
+                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`GitHub API error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    const currentUsers = JSON.parse(atob(data.content)).users;
+
+                    // Check for existing username
+                    if (currentUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
                         setError('Username already taken');
                         setLoading(false);
                         return;
                     }
 
+                    // Create new user
                     const newUser = {
                         id: Date.now().toString(),
                         username,
@@ -118,12 +134,30 @@
                         createdAt: new Date().toISOString()
                     };
 
-                    await saveUser(newUser);
+                    // Update users.json with new user
+                    const updateResponse = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: 'Add new user',
+                            content: btoa(JSON.stringify({ users: [...currentUsers, newUser] }, null, 2)),
+                            sha: data.sha
+                        })
+                    });
+
+                    if (!updateResponse.ok) {
+                        const errorData = await updateResponse.json();
+                        throw new Error(`Failed to update users: ${JSON.stringify(errorData)}`);
+                    }
+
                     setCurrentUser(newUser);
                     setView('chat');
                 } catch (err) {
-                    setError('Signup failed. Please try again.');
-                    console.error(err);
+                    console.error('Signup error:', err);
+                    setError(`Signup failed: ${err.message}`);
                 } finally {
                     setLoading(false);
                 }
@@ -135,7 +169,19 @@
                 setError('');
 
                 try {
-                    const users = await fetchUsers();
+                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch users');
+                    }
+
+                    const data = await response.json();
+                    const users = JSON.parse(atob(data.content)).users;
                     const user = users.find(u => u.username === username && u.password === password);
                     
                     if (user) {
@@ -145,8 +191,8 @@
                         setError('Invalid username or password');
                     }
                 } catch (err) {
+                    console.error('Login error:', err);
                     setError('Login failed. Please try again.');
-                    console.error(err);
                 } finally {
                     setLoading(false);
                 }
@@ -164,8 +210,33 @@
                 };
 
                 try {
-                    const messages = await fetchMessages();
-                    await saveMessages([...messages, message]);
+                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    const data = await response.json();
+                    const currentMessages = JSON.parse(atob(data.content)).chats;
+
+                    const updateResponse = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: 'Add new message',
+                            content: btoa(JSON.stringify({ chats: [...currentMessages, message] }, null, 2)),
+                            sha: data.sha
+                        })
+                    });
+
+                    if (!updateResponse.ok) {
+                        throw new Error('Failed to send message');
+                    }
+
                     setNewMessage('');
                     await loadMessages();
                 } catch (err) {
@@ -173,78 +244,20 @@
                 }
             }
 
-            async function fetchUsers() {
-                try {
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
-                        headers: { Authorization: `token ${GITHUB_TOKEN}` }
-                    });
-                    const data = await response.json();
-                    return JSON.parse(atob(data.content)).users;
-                } catch (error) {
-                    console.error('Error fetching users:', error);
-                    return [];
-                }
-            }
-
-            async function saveUser(newUser) {
-                const users = await fetchUsers();
-                const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
-                    method: 'PUT',
-                    headers: { 
-                        Authorization: `token ${GITHUB_TOKEN}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: 'Add new user',
-                        content: btoa(JSON.stringify({ users: [...users, newUser] }, null, 2)),
-                        sha: (await fetchFileInfo('users.json')).sha
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to save user');
-            }
-
-            async function fetchMessages() {
-                try {
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
-                        headers: { Authorization: `token ${GITHUB_TOKEN}` }
-                    });
-                    const data = await response.json();
-                    return JSON.parse(atob(data.content)).chats;
-                } catch (error) {
-                    console.error('Error fetching messages:', error);
-                    return [];
-                }
-            }
-
-            async function saveMessages(messages) {
-                const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
-                    method: 'PUT',
-                    headers: { 
-                        Authorization: `token ${GITHUB_TOKEN}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: 'Update messages',
-                        content: btoa(JSON.stringify({ chats: messages }, null, 2)),
-                        sha: (await fetchFileInfo('chats.json')).sha
-                    })
-                });
-                
-                if (!response.ok) throw new Error('Failed to save messages');
-            }
-
-            async function fetchFileInfo(filename) {
-                const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/${filename}`, {
-                    headers: { Authorization: `token ${GITHUB_TOKEN}` }
-                });
-                return response.json();
-            }
-
             async function loadMessages() {
                 try {
-                    const messages = await fetchMessages();
-                    setMessages(messages);
+                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
+                        headers: { 
+                            'Authorization': `token ${GITHUB_TOKEN}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const messages = JSON.parse(atob(data.content)).chats;
+                        setMessages(messages);
+                    }
                 } catch (err) {
                     console.error('Failed to load messages:', err);
                 }
