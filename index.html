@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Toro Chat 🐂</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toro Chat 🐂</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -141,10 +141,16 @@
 
             function handleAddFriend(e) {
                 e.preventDefault();
-                if (!newFriendUsername.trim()) return;
+                if (!newFriendUsername.trim()) {
+                    setError('Please enter a username');
+                    return;
+                }
 
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
                 const friend = users.find(u => u.username.toLowerCase() === newFriendUsername.toLowerCase());
+
+                // Debugging: log the friend variable
+                console.log('Friend Found:', friend);
 
                 if (!friend) {
                     setError('User not found');
