@@ -18,6 +18,160 @@
     <div id="root"></div>
     <script type="text/babel">
         function App() {
+            const [view, setView] = React.useState('welcome');
+            const [username, setUsername] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [error, setError] = React.useState('');
+
+            const handleSignup = (e) => {
+                e.preventDefault();
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                
+                if (users.some(u => u.username === username)) {
+                    setError('Username already taken');
+                    return;
+                }
+
+                const newUser = {
+                    id: Date.now().toString(),
+                    username,
+                    password
+                };
+
+                users.push(newUser);
+                localStorage.setItem('users', JSON.stringify(users));
+                setError('Account created! Please log in.');
+                setView('login');
+            };
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const user = users.find(u => u.username === username && u.password === password);
+                
+                if (user) {
+                    setError('');
+                    alert('Login successful!'); // We'll replace this with actual chat later
+                } else {
+                    setError('Invalid username or password');
+                }
+            };
+
+            if (view === 'signup') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                            <h2 className="text-3xl font-bold text-center text-[#8B4513] mb-6">Create Account</h2>
+                            
+                            {error && (
+                                <div className="bg-red-100 text-red-700 p-3 rounded mb-4">
+                                    {error}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSignup} className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Username</label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#8B4513]"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Password</label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#8B4513]"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="w-full bg-[#8B4513] text-white p-3 rounded-lg hover:bg-[#654321]"
+                                >
+                                    Sign Up
+                                </button>
+                            </form>
+
+                            <button
+                                onClick={() => {
+                                    setView('welcome');
+                                    setError('');
+                                }}
+                                className="w-full text-[#8B4513] mt-4 hover:underline"
+                            >
+                                Back to Welcome
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'login') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                            <h2 className="text-3xl font-bold text-center text-[#8B4513] mb-6">Welcome Back</h2>
+                            
+                            {error && (
+                                <div className={`p-3 rounded mb-4 ${
+                                    error.includes('created') 
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-red-100 text-red-700'
+                                }`}>
+                                    {error}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Username</label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#8B4513]"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Password</label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#8B4513]"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="w-full bg-[#8B4513] text-white p-3 rounded-lg hover:bg-[#654321]"
+                                >
+                                    Login
+                                </button>
+                            </form>
+
+                            <button
+                                onClick={() => {
+                                    setView('welcome');
+                                    setError('');
+                                }}
+                                className="w-full text-[#8B4513] mt-4 hover:underline"
+                            >
+                                Back to Welcome
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Welcome Screen (default)
             return (
                 <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
@@ -27,10 +181,16 @@
                         </div>
 
                         <div className="space-y-4">
-                            <button className="w-full bg-[#8B4513] text-white p-4 rounded-lg hover:bg-[#654321]">
+                            <button 
+                                onClick={() => setView('signup')}
+                                className="w-full bg-[#8B4513] text-white p-4 rounded-lg hover:bg-[#654321]"
+                            >
                                 Sign Up
                             </button>
-                            <button className="w-full border-2 border-[#8B4513] text-[#8B4513] p-4 rounded-lg hover:bg-[#8B4513] hover:text-white">
+                            <button 
+                                onClick={() => setView('login')}
+                                className="w-full border-2 border-[#8B4513] text-[#8B4513] p-4 rounded-lg hover:bg-[#8B4513] hover:text-white"
+                            >
                                 Login
                             </button>
                         </div>
