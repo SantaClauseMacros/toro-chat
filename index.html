@@ -1,28 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
+    <title>Toro Chat 🐂</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toro Chat 🐂</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-
-        body {
-            font-family: 'Poppins', sans-serif;
-        }
-
+        
+        body { font-family: 'Poppins', sans-serif; }
+        
         .toro-gradient {
             background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
         }
-
+        
         .message-bubble {
             transition: all 0.3s ease;
         }
-
+        
         .message-bubble:hover {
             transform: translateY(-2px);
         }
@@ -41,7 +39,7 @@
             const [currentUser, setCurrentUser] = useState(null);
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
-
+            
             // Friend and chat state
             const [friends, setFriends] = useState([]);
             const [activeChat, setActiveChat] = useState(null);
@@ -95,7 +93,7 @@
                 }
 
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
-
+                
                 if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
                     setError('Username already taken');
                     setLoading(false);
@@ -113,7 +111,7 @@
                 localStorage.setItem('users', JSON.stringify(users));
                 localStorage.setItem('currentUser', JSON.stringify(newUser));
                 localStorage.setItem(`friends_${newUser.id}`, '[]');
-
+                
                 setCurrentUser(newUser);
                 setFriends([]);
                 setLoading(false);
@@ -127,7 +125,7 @@
 
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
                 const user = users.find(u => u.username === username && u.password === password);
-
+                
                 if (user) {
                     localStorage.setItem('currentUser', JSON.stringify(user));
                     setCurrentUser(user);
@@ -164,17 +162,17 @@
 
                 // Create chat ID for these two users
                 const chatId = `chat_${currentUser.id}_${friend.id}`;
-
+                
                 // Add friend to current user's friends list
                 const newFriend = {
                     id: friend.id,
                     username: friend.username,
                     chatId
                 };
-
+                
                 currentFriends.push(newFriend);
                 localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(currentFriends));
-
+                
                 // Add current user to friend's friends list
                 const friendsFriends = JSON.parse(localStorage.getItem(`friends_${friend.id}`) || '[]');
                 friendsFriends.push({
@@ -183,10 +181,10 @@
                     chatId
                 });
                 localStorage.setItem(`friends_${friend.id}`, JSON.stringify(friendsFriends));
-
+                
                 // Initialize empty chat
                 localStorage.setItem(`chat_${chatId}`, '[]');
-
+                
                 setFriends(currentFriends);
                 setNewFriendUsername('');
                 setError('');
@@ -207,7 +205,7 @@
                 const chatMessages = JSON.parse(localStorage.getItem(`chat_${activeChat}`) || '[]');
                 chatMessages.push(message);
                 localStorage.setItem(`chat_${activeChat}`, JSON.stringify(chatMessages));
-
+                
                 setMessages(chatMessages);
                 setNewMessage('');
             }
@@ -234,6 +232,7 @@
                                 <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
                                 <p className="text-gray-500">Private messaging unleashed</p>
                             </div>
+
                             <div className="space-y-4">
                                 <button
                                     onClick={() => setView('signup')}
@@ -263,11 +262,13 @@
                                 <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
                                 <p className="text-gray-500">Create your account</p>
                             </div>
+
                             {error && (
                                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
                                     {error}
                                 </div>
                             )}
+
                             <form onSubmit={handleSignup} className="space-y-4">
                                 <div>
                                     <label className="block text-gray-700 mb-2">Username</label>
@@ -310,6 +311,7 @@
                                     {loading ? 'Creating Account...' : 'Create Account'}
                                 </button>
                             </form>
+
                             <div className="mt-6 text-center">
                                 <button
                                     onClick={() => setView('login')}
@@ -333,11 +335,13 @@
                                 <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
                                 <p className="text-gray-500">Login to your account</p>
                             </div>
+
                             {error && (
                                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
                                     {error}
                                 </div>
                             )}
+
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
                                     <label className="block text-gray-700 mb-2">Username</label>
@@ -369,6 +373,7 @@
                                     {loading ? 'Logging in...' : 'Login'}
                                 </button>
                             </form>
+
                             <div className="mt-6 text-center">
                                 <button
                                     onClick={() => setView('signup')}
