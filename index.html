@@ -24,45 +24,12 @@
         .message-bubble:hover {
             transform: translateY(-2px);
         }
-
-        .slide-up {
-            animation: slideUp 0.3s ease forwards;
-        }
-
-        @keyframes slideUp {
-            from { 
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to { 
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .loading-dots span {
-            animation: loading 1s infinite;
-            margin: 0 2px;
-        }
-        
-        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-        
-        @keyframes loading {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
-        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        
-        // GitHub configuration
-        const GITHUB_USERNAME = 'SantaClauseMacros';
-        const REPO_NAME = 'toro-chat';
-        const GITHUB_TOKEN = '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';
+        const { useState, useEffect } = React;
 
         function App() {
             const [view, setView] = useState('welcome');
@@ -74,25 +41,23 @@
             const [newMessage, setNewMessage] = useState('');
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
-            const messagesEndRef = useRef(null);
-
-            const scrollToBottom = () => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            };
 
             useEffect(() => {
-                scrollToBottom();
-            }, [messages]);
-
-            useEffect(() => {
-                if (currentUser) {
-                    loadMessages();
-                    const interval = setInterval(loadMessages, 3000);
-                    return () => clearInterval(interval);
+                // Load messages from localStorage
+                const savedMessages = localStorage.getItem('messages');
+                if (savedMessages) {
+                    setMessages(JSON.parse(savedMessages));
                 }
-            }, [currentUser]);
 
-            async function handleSignup(e) {
+                // Check for logged in user
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    setCurrentUser(JSON.parse(savedUser));
+                    setView('chat');
+                }
+            }, []);
+
+            function handleSignup(e) {
                 e.preventDefault();
                 setLoading(true);
                 setError('');
@@ -103,102 +68,58 @@
                     return;
                 }
 
-                try {
-                    // First, check if we can access users.json
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`GitHub API error: ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    const currentUsers = JSON.parse(atob(data.content)).users;
-
-                    // Check for existing username
-                    if (currentUsers.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                        setError('Username already taken');
-                        setLoading(false);
-                        return;
-                    }
-
-                    // Create new user
-                    const newUser = {
-                        id: Date.now().toString(),
-                        username,
-                        password,
-                        createdAt: new Date().toISOString()
-                    };
-
-                    // Update users.json with new user
-                    const updateResponse = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
-                        method: 'PUT',
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            message: 'Add new user',
-                            content: btoa(JSON.stringify({ users: [...currentUsers, newUser] }, null, 2)),
-                            sha: data.sha
-                        })
-                    });
-
-                    if (!updateResponse.ok) {
-                        const errorData = await updateResponse.json();
-                        throw new Error(`Failed to update users: ${JSON.stringify(errorData)}`);
-                    }
-
-                    setCurrentUser(newUser);
-                    setView('chat');
-                } catch (err) {
-                    console.error('Signup error:', err);
-                    setError(`Signup failed: ${err.message}`);
-                } finally {
+                if (username.length < 3) {
+                    setError('Username must be at least 3 characters');
                     setLoading(false);
+                    return;
                 }
+
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                
+                if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    setError('Username already taken');
+                    setLoading(false);
+                    return;
+                }
+
+                const newUser = {
+                    id: Date.now().toString(),
+                    username,
+                    password,
+                    createdAt: new Date().toISOString()
+                };
+
+                users.push(newUser);
+                localStorage.setItem('users', JSON.stringify(users));
+                localStorage.setItem('currentUser', JSON.stringify(newUser));
+                
+                setCurrentUser(newUser);
+                setLoading(false);
+                setView('chat');
             }
 
-            async function handleLogin(e) {
+            function handleLogin(e) {
                 e.preventDefault();
                 setLoading(true);
                 setError('');
-
-                try {
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/users.json`, {
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch users');
-                    }
-
-                    const data = await response.json();
-                    const users = JSON.parse(atob(data.content)).users;
-                    const user = users.find(u => u.username === username && u.password === password);
-                    
-                    if (user) {
-                        setCurrentUser(user);
-                        setView('chat');
-                    } else {
-                        setError('Invalid username or password');
-                    }
-                } catch (err) {
-                    console.error('Login error:', err);
-                    setError('Login failed. Please try again.');
-                } finally {
-                    setLoading(false);
+                
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const user = users.find(u => 
+                    u.username.toLowerCase() === username.toLowerCase() && 
+                    u.password === password
+                );
+                
+                if (user) {
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    setCurrentUser(user);
+                    setView('chat');
+                } else {
+                    setError('Invalid username or password');
                 }
+                setLoading(false);
             }
 
-            async function handleSendMessage(e) {
+            function handleSendMessage(e) {
                 e.preventDefault();
                 if (!newMessage.trim()) return;
 
@@ -209,83 +130,45 @@
                     timestamp: new Date().toISOString()
                 };
 
-                try {
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-
-                    const data = await response.json();
-                    const currentMessages = JSON.parse(atob(data.content)).chats;
-
-                    const updateResponse = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
-                        method: 'PUT',
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            message: 'Add new message',
-                            content: btoa(JSON.stringify({ chats: [...currentMessages, message] }, null, 2)),
-                            sha: data.sha
-                        })
-                    });
-
-                    if (!updateResponse.ok) {
-                        throw new Error('Failed to send message');
-                    }
-
-                    setNewMessage('');
-                    await loadMessages();
-                } catch (err) {
-                    console.error('Failed to send message:', err);
-                }
+                const updatedMessages = [...messages, message];
+                setMessages(updatedMessages);
+                localStorage.setItem('messages', JSON.stringify(updatedMessages));
+                setNewMessage('');
             }
 
-            async function loadMessages() {
-                try {
-                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/chats.json`, {
-                        headers: { 
-                            'Authorization': `token ${GITHUB_TOKEN}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        const messages = JSON.parse(atob(data.content)).chats;
-                        setMessages(messages);
-                    }
-                } catch (err) {
-                    console.error('Failed to load messages:', err);
-                }
+            function handleLogout() {
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
+                setView('welcome');
+                setUsername('');
+                setPassword('');
+                setConfirmPassword('');
+                setError('');
             }
 
             // Welcome Screen
             if (view === 'welcome') {
                 return (
                     <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md slide-up">
-                            <div className="text-center mb-12">
-                                <div className="text-7xl mb-6 animate-bounce">🐂</div>
-                                <h1 className="text-5xl font-bold text-red-600 mb-4">
+                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4 animate-bounce">🐂</div>
+                                <h1 className="text-4xl font-bold text-red-600 mb-2">
                                     TORO CHAT
                                 </h1>
-                                <p className="text-gray-600 text-lg">Unleash the Conversation</p>
+                                <p className="text-gray-500">Choose your path</p>
                             </div>
 
                             <div className="space-y-4">
                                 <button
                                     onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 transition-colors text-lg font-semibold"
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 transition-colors"
                                 >
                                     Sign Up
                                 </button>
                                 <button
                                     onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50 transition-colors text-lg font-semibold"
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50 transition-colors"
                                 >
                                     Login
                                 </button>
@@ -299,7 +182,7 @@
             if (view === 'signup') {
                 return (
                     <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md slide-up">
+                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
                                 <div className="text-5xl mb-4">🐂</div>
                                 <h1 className="text-3xl font-bold text-red-600 mb-2">
@@ -355,11 +238,7 @@
                                     disabled={loading}
                                     className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors"
                                 >
-                                    {loading ? (
-                                        <div className="loading-dots">
-                                            Creating Account<span>.</span><span>.</span><span>.</span>
-                                        </div>
-                                    ) : "Create Account"}
+                                    {loading ? 'Creating Account...' : 'Create Account'}
                                 </button>
                             </form>
 
@@ -383,7 +262,7 @@
             if (view === 'login') {
                 return (
                     <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md slide-up">
+                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
                                 <div className="text-5xl mb-4">🐂</div>
                                 <h1 className="text-3xl font-bold text-red-600 mb-2">
@@ -426,11 +305,7 @@
                                     disabled={loading}
                                     className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors"
                                 >
-                                    {loading ? (
-                                        <div className="loading-dots">
-                                            Logging in<span>.</span><span>.</span><span>.</span>
-                                        </div>
-                                    ) : "Login"}
+                                    {loading ? 'Logging in...' : 'Login'}
                                 </button>
                             </form>
 
@@ -463,13 +338,7 @@
                             <div className="flex items-center space-x-4">
                                 <span>@{currentUser?.username}</span>
                                 <button
-                                    onClick={() => {
-                                        setCurrentUser(null);
-                                        setView('welcome');
-                                        setMessages([]);
-                                        setNewMessage('');
-                                        setError('');
-                                    }}
+                                    onClick={handleLogout}
                                     className="text-sm hover:text-red-200 transition-colors"
                                 >
                                     Logout
@@ -500,7 +369,6 @@
                                 </div>
                             </div>
                         ))}
-                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* Message Input */}
@@ -515,7 +383,7 @@
                             />
                             <button
                                 type="submit"
-                                className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition-colors flex items-center space-x-2"
+className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition-colors flex items-center space-x-2"
                             >
                                 <span>Send</span>
                                 <span>⚡</span>
