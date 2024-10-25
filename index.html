@@ -1,344 +1,658 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Toro Chat 🐂</title>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .toro-gradient { background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%); }
-    .message-hover { transition: all 0.3s ease; }
-    .message-hover:hover { transform: translateY(-2px); }
-    .emoji-picker { position: absolute; bottom: 100%; right: 0; }
-  </style>
+    <title>Toro Chat 🐂</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+        
+        body { 
+            font-family: 'Poppins', sans-serif;
+            background: #f7f7f7;
+        }
+        
+        .toro-gradient {
+            background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .message-bubble {
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+            padding: 1.25rem 1.5rem;
+            min-width: 250px;
+            max-width: 80%;
+            border-radius: 1rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .message-bubble:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .slide-up {
+            animation: slideUp 0.3s ease forwards;
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #FF4B2B;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF416C;
+        }
+
+        .fancy-button {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .fancy-button::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: -100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .fancy-button:hover::after {
+            left: 100%;
+        }
+
+        .fancy-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .loading-dots::after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80% { content: ''; }
+        }
+    </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
-    const ADMIN_USERNAME = 'Theo';
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-    function App() {
-      // Core States
-      const [view, setView] = useState('welcome');
-      const [username, setUsername] = useState('');
-      const [password, setPassword] = useState('');
-      const [error, setError] = useState('');
-      const [currentUser, setCurrentUser] = useState(null);
+        function App() {
+            // State
+            const [view, setView] = useState('welcome');
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [currentUser, setCurrentUser] = useState(null);
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+            
+            // Chat state
+            const [friends, setFriends] = useState([]);
+            const [chats, setChats] = useState([]);
+            const [activeChat, setActiveChat] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [newMessage, setNewMessage] = useState('');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const [editingMessage, setEditingMessage] = useState(null);
+            const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+            const [attachment, setAttachment] = useState(null);
+            const [chatName, setChatName] = useState('');
 
-      // Chat States
-      const [friends, setFriends] = useState([]);
-      const [chats, setChats] = useState([]);
-      const [activeChat, setActiveChat] = useState(null);
-      const [messages, setMessages] = useState([]);
-      const [newMessage, setNewMessage] = useState('');
-      const [searchQuery, setSearchQuery] = useState('');
-      const [searchResults, setSearchResults] = useState([]);
-      const [editingMessage, setEditingMessage] = useState(null);
-      const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-      const [attachment, setAttachment] = useState(null);
-      const fileInputRef = useRef();
-      const chatContainerRef = useRef();
+            // Refs
+            const fileInputRef = useRef();
+            const chatContainerRef = useRef();
+            const messageInputRef = useRef();
 
-      // Load saved data
-      useEffect(() => {
-        const savedUser = localStorage.getItem('currentUser');
-        if (savedUser) {
-          const user = JSON.parse(savedUser);
-          setCurrentUser(user);
-          loadUserData(user.id);
-          setView('chat');
-        }
-      }, []);
+            // Load initial data
+            useEffect(() => {
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    const user = JSON.parse(savedUser);
+                    setCurrentUser(user);
+                    loadUserData(user.id);
+                    setView('chat');
+                }
+            }, []);
 
-      // Auto scroll chat & refresh data
-      useEffect(() => {
-        if (chatContainerRef.current) {
-          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-        if (currentUser) {
-          const interval = setInterval(() => loadUserData(currentUser.id), 1000);
-          return () => clearInterval(interval);
-        }
-      }, [messages, currentUser]);
+            // Auto scroll & refresh
+            useEffect(() => {
+                if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+                }
+                
+                if (currentUser && activeChat) {
+                    const interval = setInterval(() => loadMessages(activeChat.id), 1000);
+                    return () => clearInterval(interval);
+                }
+            }, [messages, currentUser, activeChat]);
 
-      function loadUserData(userId) {
-        const savedFriends = localStorage.getItem(`friends_${userId}`);
-        if (savedFriends) setFriends(JSON.parse(savedFriends));
-        const savedChats = localStorage.getItem(`chats_${userId}`);
-        if (savedChats) setChats(JSON.parse(savedChats));
-        if (activeChat) {
-          const savedMessages = localStorage.getItem(`messages_${activeChat.id}`);
-          if (savedMessages) setMessages(JSON.parse(savedMessages));
-        }
-      }
+            function loadUserData(userId) {
+                // Load friends
+                const savedFriends = localStorage.getItem(`friends_${userId}`);
+                if (savedFriends) {
+                    setFriends(JSON.parse(savedFriends));
+                }
 
-      function handleLogin(e) {
-        e.preventDefault();
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        const user = users.find(u => u.username === username && u.password === password);
-        if (user) {
-          localStorage.setItem('currentUser', JSON.stringify(user));
-          setCurrentUser(user);
-          loadUserData(user.id);
-          setView('chat');
-        } else {
-          setError('Invalid username or password');
-        }
-      }
+                // Load chats
+                const savedChats = localStorage.getItem(`chats_${userId}`);
+                if (savedChats) {
+                    setChats(JSON.parse(savedChats));
+                }
+            }
 
-      function handleSignup(e) {
-        e.preventDefault();
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        if (users.some(u => u.username === username)) {
-          setError('Username already taken');
-          return;
-        }
-        const newUser = {
-          id: Date.now().toString(),
-          username,
-          password,
-          isAdmin: username === ADMIN_USERNAME,
-          createdAt: new Date().toISOString(),
-        };
-        users.push(newUser);
-        localStorage.setItem('users', JSON.stringify(users));
-        localStorage.setItem('currentUser', JSON.stringify(newUser));
-        localStorage.setItem(`friends_${newUser.id}`, '[]');
-        localStorage.setItem(`chats_${newUser.id}`, '[]');
-        setCurrentUser(newUser);
-        setView('chat');
-      }
+            function loadMessages(chatId) {
+                const savedMessages = localStorage.getItem(`messages_${chatId}`);
+                if (savedMessages) {
+                    setMessages(JSON.parse(savedMessages));
+                }
+            }
 
-      function handleSearch(query) {
-        setSearchQuery(query);
-        if (!query.trim()) {
-          setSearchResults([]);
-          return;
-        }
-        const users = JSON.parse(localStorage.getItem('users') || '[]');
-        const results = users.filter(user => user.id !== currentUser.id && user.username.toLowerCase().includes(query.toLowerCase()));
-        setSearchResults(results);
-      }
+            function saveMessages(chatId, newMessages) {
+                localStorage.setItem(`messages_${chatId}`, JSON.stringify(newMessages));
+                setMessages(newMessages);
+            }
 
-      function startChat(user) {
-        const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
-        const existingChat = chats.find(c => c.id === chatId);
-        if (!existingChat) {
-          const newChat = {
-            id: chatId,
-            name: `Chat with ${user.username}`,
-            participants: [currentUser.id, user.id],
-            createdAt: new Date().toISOString(),
-          };
-          const updatedChats = [...chats, newChat];
-          localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
-          setChats(updatedChats);
-          setActiveChat(newChat);
-        } else {
-          setActiveChat(existingChat);
-        }
-        setSearchQuery('');
-        setSearchResults([]);
-      }
+            async function handleLogin(e) {
+                e.preventDefault();
+                setLoading(true);
+                setError('');
 
-      function handleSendMessage(e) {
-        e.preventDefault();
-        if ((!newMessage.trim() && !attachment) || !activeChat) return;
+                try {
+                    const users = JSON.parse(localStorage.getItem('users') || '[]');
+                    const user = users.find(u => u.username === username && u.password === password);
+                    
+                    if (user) {
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                        setCurrentUser(user);
+                        loadUserData(user.id);
+                        setView('chat');
+                    } else {
+                        setError('Invalid username or password');
+                    }
+                } catch (err) {
+                    setError('Login failed. Please try again.');
+                } finally {
+                    setLoading(false);
+                }
+            }
 
-        let attachmentData = null;
-        if (attachment) {
-          attachmentData = {
-            type: attachment.type,
-            name: attachment.name,
-            data: URL.createObjectURL(attachment),
-          };
-        }
+            async function handleSignup(e) {
+                e.preventDefault();
+                setLoading(true);
+                setError('');
 
-        const message = {
-          id: Date.now().toString(),
-          text: newMessage.trim(),
-          sender: currentUser.id,
-          attachment: attachmentData,
-          timestamp: new Date().toISOString(),
-          isEdited: false,
-          isUnsent: false,
-        };
+                try {
+                    if (password !== confirmPassword) {
+                        throw new Error('Passwords do not match');
+                    }
 
-        const updatedMessages = [...messages, message];
-        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-        setMessages(updatedMessages);
-        setNewMessage('');
-        setAttachment(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
+                    const users = JSON.parse(localStorage.getItem('users') || '[]');
+                    
+                    if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                        throw new Error('Username already taken');
+                    }
 
-      function handleEditMessage(message) {
-        const updatedMessages = messages.map(m =>
-          m.id === message.id ? { ...m, text: newMessage, isEdited: true } : m
-        );
-        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-        setMessages(updatedMessages);
-        setEditingMessage(null);
-        setNewMessage('');
-      }
+                    const newUser = {
+                        id: Date.now().toString(),
+                        username,
+                        password,
+                        createdAt: new Date().toISOString()
+                    };
 
-      function handleUnsendMessage(message) {
-        const updatedMessages = messages.map(m =>
-          m.id === message.id ? { ...m, isUnsent: true } : m
-        );
-        localStorage.setItem(`messages_${activeChat.id}`, JSON.stringify(updatedMessages));
-        setMessages(updatedMessages);
-      }
+                    users.push(newUser);
+                    localStorage.setItem('users', JSON.stringify(users));
+                    localStorage.setItem('currentUser', JSON.stringify(newUser));
+                    localStorage.setItem(`friends_${newUser.id}`, '[]');
+                    localStorage.setItem(`chats_${newUser.id}`, '[]');
+                    
+                    setCurrentUser(newUser);
+                    setView('chat');
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            }
 
-      return (
-        <div className="min-h-screen toro-gradient flex items-center justify-center">
-          {view === 'welcome' ? (
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h1 className="text-4xl font-bold text-black">Welcome to Toro Chat 🐂</h1>
-              <form onSubmit={handleLogin} className="mt-4 space-y-4">
-                <input
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full p-2 rounded border"
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-2 rounded border"
-                />
-                <button type="submit" className="w-full p-2 bg-blue-500 text-white rounded">Login</button>
-                <button onClick={handleSignup} className="w-full p-2 bg-green-500 text-white rounded">Signup</button>
-              </form>
-              {error && <p className="text-red-500 mt-2">{error}</p>}
-            </div>
-          ) : (
-            <div className="flex flex-col bg-white w-full max-w-4xl rounded-lg shadow-lg overflow-hidden">
-              <header className="bg-gray-800 text-white p-4">
-                <h2 className="text-xl">{currentUser.username}</h2>
-              </header>
-              <div className="flex flex-grow">
-                <aside className="w-1/3 bg-gray-100 p-2">
-                  <div className="mb-4">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => handleSearch(e.target.value)}
-                      placeholder="Search users..."
-                      className="w-full p-2 rounded"
-                    />
-                    {searchResults.map((result) => (
-                      <div
-                        key={result.id}
-                        className="p-2 bg-white rounded shadow mt-2 cursor-pointer"
-                        onClick={() => startChat(result)}
-                      >
-                        {result.username}
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    {chats.map((chat) => (
-                      <div
-                        key={chat.id}
-                        className={`p-2 rounded mt-2 cursor-pointer ${
-                          activeChat?.id === chat.id ? 'bg-blue-500 text-white' : 'bg-white'
-                        }`}
-                        onClick={() => setActiveChat(chat)}
-                      >
-                        {chat.name}
-                      </div>
-                    ))}
-                  </div>
-                </aside>
-                <main className="w-2/3 flex flex-col">
-                  <div className="flex-grow p-4 overflow-y-auto" ref={chatContainerRef}>
-                    {messages.map((msg) => (
-                      <div key={msg.id} className="mb-2">
-                        {msg.isUnsent ? (
-                          <p className="italic text-gray-500">Message unsent</p>
-                        ) : (
-                          <div className={`p-2 rounded ${msg.sender === currentUser.id ? 'bg-blue-200' : 'bg-gray-200'}`}>
-                            {msg.attachment && (
-                              <div className="mb-2">
-                                <a
-                                  href={msg.attachment.data}
-                                  download={msg.attachment.name}
-                                  className="underline text-blue-500"
-                                >
-                                  {msg.attachment.name}
-                                </a>
-                              </div>
-                            )}
-                            <p>{msg.text}</p>
-                            {msg.isEdited && <span className="text-xs text-gray-600">(Edited)</span>}
-                            <div className="text-xs text-gray-500">
-                              {new Date(msg.timestamp).toLocaleTimeString()}
-                              {msg.sender === currentUser.id && (
-                                <>
-                                  <button
-                                    className="ml-2 text-blue-500"
-                                    onClick={() => {
-                                      setEditingMessage(msg);
-                                      setNewMessage(msg.text);
-                                    }}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    className="ml-2 text-red-500"
-                                    onClick={() => handleUnsendMessage(msg)}
-                                  >
-                                    Unsend
-                                  </button>
-                                </>
-                              )}
+            function handleSearch(query) {
+                setSearchQuery(query);
+                if (!query.trim()) {
+                    setSearchResults([]);
+                    return;
+                }
+
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const results = users.filter(user => 
+                    user.id !== currentUser.id && 
+                    user.username.toLowerCase().includes(query.toLowerCase())
+                );
+                setSearchResults(results);
+            }
+
+            function handleStartChat(user) {
+                const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
+                const existingChat = chats.find(c => c.id === chatId);
+
+                if (!existingChat) {
+                    const newChat = {
+                        id: chatId,
+                        name: `Chat with ${user.username}`,
+                        participants: [currentUser.id, user.id],
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const updatedChats = [...chats, newChat];
+                    localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
+                    localStorage.setItem(`messages_${chatId}`, '[]');
+                    setChats(updatedChats);
+                    setActiveChat(newChat);
+                } else {
+                    setActiveChat(existingChat);
+                }
+
+                setSearchQuery('');
+                setSearchResults([]);
+            }
+
+            function handleSendMessage(e) {
+                e.preventDefault();
+                if ((!newMessage.trim() && !attachment) || !activeChat) return;
+
+                const message = {
+                    id: Date.now().toString(),
+                    text: newMessage.trim(),
+                    sender: currentUser.id,
+                    timestamp: new Date().toISOString(),
+                    isEdited: false
+                };
+
+                const updatedMessages = [...messages, message];
+                saveMessages(activeChat.id, updatedMessages);
+                setNewMessage('');
+            }
+
+            function handleEditMessage(message) {
+                setEditingMessage(message);
+                setNewMessage(message.text);
+                messageInputRef.current?.focus();
+            }
+
+            function handleSaveEdit() {
+                if (!editingMessage || !newMessage.trim()) return;
+
+                const updatedMessages = messages.map(msg =>
+                    msg.id === editingMessage.id
+                        ? { ...msg, text: newMessage, isEdited: true }
+                        : msg
+                );
+
+                saveMessages(activeChat.id, updatedMessages);
+                setEditingMessage(null);
+                setNewMessage('');
+            }
+
+            function handleUnsendMessage(messageId) {
+                const updatedMessages = messages.filter(msg => msg.id !== messageId);
+                saveMessages(activeChat.id, updatedMessages);
+            }
+
+            function updateChatName(name) {
+                if (!name.trim() || !activeChat) return;
+
+                const updatedChats = chats.map(chat =>
+                    chat.id === activeChat.id
+                        ? { ...chat, name }
+                        : chat
+                );
+
+                localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(updatedChats));
+                setChats(updatedChats);
+                setActiveChat({ ...activeChat, name });
+                setChatName('');
+            }
+
+            // Welcome Screen
+            if (view === 'welcome') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="glass-effect rounded-2xl shadow-2xl p-8 w-full max-w-md slide-up">
+                            <div className="text-center mb-12">
+                                <div className="text-7xl mb-6 animate-bounce">🐂</div>
+                                <h1 className="text-5xl font-bold text-red-600 mb-4">
+                                    TORO CHAT
+                                </h1>
+                                <p className="text-gray-600 text-lg">Unleash the Conversation</p>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <form onSubmit={handleSendMessage} className="p-4 bg-gray-100 flex">
-                    <input
-                      type="text"
-                      placeholder="Type a message..."
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      className="flex-grow p-2 rounded"
-                    />
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={(e) => setAttachment(e.target.files[0])}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current.click()}
-                      className="ml-2 p-2 bg-gray-300 rounded"
-                    >
-                      📎
-                    </button>
-                    <button type="submit" className="ml-2 p-2 bg-blue-500 text-white rounded">Send</button>
-                  </form>
-                </main>
-              </div>
+
+                            {error && (
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 fade-in">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <button
+                                    onClick={() => setView('signup')}
+                                    className="w-full bg-red-500 text-white p-4 rounded-xl hover:bg-red-600 transition-all fancy-button font-semibold text-lg"
+                                >
+                                    Get Started
+                                </button>
+                                <button
+                                    onClick={() => setView('login')}
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-xl hover:bg-red-50 transition-all font-semibold text-lg"
+                                >
+                                    Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Login Screen
+            if (view === 'login') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="glass-effect rounded-2xl shadow-2xl p-8 w-full max-w-md slide-up">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4">🐂</div>
+                                <h1 className="text-4xl font-bold text-red-600 mb-2">
+                                    Welcome Back
+                                </h1>
+                                <p className="text-gray-600">Login to your account</p>
+                            </div>
+
+                            {error && (
+<div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 fade-in">
+    {error}
+</div>
+
+<form onSubmit={handleLogin} className="space-y-6">
+    <div>
+        <label className="block text-gray-700 font-medium mb-2">Username</label>
+        <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg"
+            placeholder="Enter your username"
+            required
+        />
+    </div>
+    <div>
+        <label className="block text-gray-700 font-medium mb-2">Password</label>
+        <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-4 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg"
+            placeholder="Enter your password"
+            required
+        />
+    </div>
+    <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-red-500 text-white p-4 rounded-xl hover:bg-red-600 transition-all fancy-button font-semibold text-lg"
+    >
+        {loading ? (
+            <span className="loading-dots">Logging in</span>
+        ) : (
+            'Login'
+        )}
+    </button>
+</form>
+
+<div className="mt-6 text-center">
+    <button
+        onClick={() => setView('signup')}
+        className="text-red-500 hover:text-red-600 font-medium"
+    >
+        Need an account? Sign up
+    </button>
+</div>
+</div>
             </div>
-          )}
-        </div>
-      );
+        );
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
+    // Chat Interface
+    return (
+        <div className="h-screen flex bg-gray-100">
+            {/* Sidebar */}
+            <div className="w-80 bg-white shadow-lg flex flex-col">
+                {/* Header */}
+                <div className="p-6 toro-gradient">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <span className="text-4xl">🐂</span>
+                            <div>
+                                <h1 className="text-white font-bold text-xl">Toro Chat</h1>
+                                <p className="text-red-100">@{currentUser?.username}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Search */}
+                <div className="p-4">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search users..."
+                            value={searchQuery}
+                            onChange={(e) => handleSearch(e.target.value)}
+                            className="w-full p-3 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                        />
+                        {searchResults.length > 0 && (
+                            <div className="absolute w-full mt-2 bg-white rounded-xl shadow-lg border p-2 z-50 max-h-60 overflow-y-auto">
+                                {searchResults.map(user => (
+                                    <button
+                                        key={user.id}
+                                        onClick={() => handleStartChat(user)}
+                                        className="w-full p-3 text-left hover:bg-gray-50 rounded-lg transition-colors flex items-center space-x-3"
+                                    >
+                                        <span className="text-2xl">👤</span>
+                                        <span className="font-medium">@{user.username}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Chats List */}
+                <div className="flex-1 overflow-y-auto">
+                    <div className="p-4 space-y-2">
+                        {chats.map(chat => (
+                            <button
+                                key={chat.id}
+                                onClick={() => setActiveChat(chat)}
+                                className={`w-full p-4 text-left rounded-xl transition-all ${
+                                    activeChat?.id === chat.id 
+                                        ? 'bg-red-50 shadow-md' 
+                                        : 'hover:bg-gray-50'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className="font-medium">{chat.name}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Logout */}
+                <button
+                    onClick={() => {
+                        localStorage.removeItem('currentUser');
+                        setView('welcome');
+                    }}
+                    className="p-4 text-red-500 hover:bg-red-50 transition-colors font-medium"
+                >
+                    Logout
+                </button>
+            </div>
+
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col bg-gray-50">
+                {activeChat ? (
+                    <>
+                        {/* Chat Header */}
+                        <div className="bg-white shadow-sm p-4 flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="text"
+                                        placeholder={activeChat.name}
+                                        value={chatName}
+                                        onChange={(e) => setChatName(e.target.value)}
+                                        className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                    />
+                                    <button
+                                        onClick={() => updateChatName(chatName)}
+                                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                    >
+                                        Update
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Messages */}
+                        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {messages.map(message => (
+                                <div
+                                    key={message.id}
+                                    className={`flex ${
+                                        message.sender === currentUser.id ? 'justify-end' : 'justify-start'
+                                    }`}
+                                >
+                                    <div className="group relative">
+                                        <div className={`message-bubble ${
+                                            message.sender === currentUser.id
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-white'
+                                        }`}>
+                                            <p className="text-lg mb-2">{message.text}</p>
+                                            <p className="text-sm opacity-75">
+                                                {new Date(message.timestamp).toLocaleTimeString([], { 
+                                                    hour: '2-digit', 
+                                                    minute: '2-digit' 
+                                                })}
+                                                {message.isEdited && ' (edited)'}
+                                            </p>
+
+                                            {message.sender === currentUser.id && (
+                                                <div className="absolute -right-12 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        onClick={() => handleEditMessage(message)}
+                                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUnsendMessage(message.id)}
+                                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Message Input */}
+                        <form onSubmit={editingMessage ? handleSaveEdit : handleSendMessage} className="p-4 bg-white border-t">
+                            <div className="flex items-center space-x-3">
+                                <input
+                                    type="text"
+                                    ref={messageInputRef}
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    placeholder={editingMessage ? "Edit message..." : "Type a message..."}
+                                    className="flex-1 p-4 border rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-lg"
+                                />
+                                <button
+                                    type="submit"
+                                    className="bg-red-500 text-white px-8 py-4 rounded-xl hover:bg-red-600 transition-all fancy-button font-medium text-lg flex items-center space-x-2"
+                                >
+                                    <span>{editingMessage ? 'Save' : 'Send'}</span>
+                                    <span>⚡</span>
+                                </button>
+                            </div>
+                        </form>
+                    </>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="text-7xl mb-4">🐂</div>
+                            <p className="text-gray-500 text-xl">Select a chat or start a new conversation</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
 </body>
 </html>
