@@ -7,31 +7,154 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/emoji-picker-element/1.18.3/index.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
         
-        body { font-family: 'Poppins', sans-serif; }
+        body { 
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
         
         .toro-gradient {
-            background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
+            background: linear-gradient(135deg, #8B4513 0%, #654321 100%);
         }
         
         .message-bubble {
             transition: all 0.3s ease;
+            max-width: 80%;
+            word-wrap: break-word;
         }
         
         .message-bubble:hover {
             transform: translateY(-2px);
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop-zone.drag-over {
+            border-color: #8B4513;
+            background: rgba(139, 69, 19, 0.1);
+        }
+
+        .emoji-picker {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .attachment-preview {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .attachment-preview img {
+            max-height: 60px;
+            border-radius: 4px;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .online-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+
+        .online-status.online {
+            background: #22c55e;
+        }
+
+        .online-status.offline {
+            background: #94a3b8;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .group-avatar {
+            background: #8B4513;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .message-status {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .message-options {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .message-bubble:hover .message-options {
+            opacity: 1;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         function App() {
+            // State variables
             const [view, setView] = useState('welcome');
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
@@ -39,417 +162,264 @@
             const [currentUser, setCurrentUser] = useState(null);
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
-            
-            // Friend and chat state
             const [friends, setFriends] = useState([]);
+            const [groups, setGroups] = useState([]);
             const [activeChat, setActiveChat] = useState(null);
             const [newFriendUsername, setNewFriendUsername] = useState('');
             const [messages, setMessages] = useState([]);
             const [newMessage, setNewMessage] = useState('');
+            const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+            const [attachments, setAttachments] = useState([]);
+            const [typingUsers, setTypingUsers] = useState({});
+            const [onlineUsers, setOnlineUsers] = useState({});
+            const [showGroupModal, setShowGroupModal] = useState(false);
+            const [newGroupName, setNewGroupName] = useState('');
+            const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
 
-            // Load current user and their friends
+            const fileInputRef = useRef(null);
+            const chatContainerRef = useRef(null);
+
+            // Effect for scrolling to bottom of chat
+            useEffect(() => {
+                if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+                }
+            }, [messages]);
+
+            // Load initial data
             useEffect(() => {
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
                     const user = JSON.parse(savedUser);
                     setCurrentUser(user);
                     loadFriends(user.id);
+                    loadGroups(user.id);
                     setView('chat');
                 }
             }, []);
 
-            // Load messages when active chat changes
-            useEffect(() => {
-                if (activeChat) {
-                    loadMessages(activeChat);
-                    const interval = setInterval(() => loadMessages(activeChat), 1000);
-                    return () => clearInterval(interval);
-                }
-            }, [activeChat]);
+            // Functions for file handling
+            const handleFileSelect = (event) => {
+                handleFileUpload(event.target.files);
+            };
 
-            function loadFriends(userId) {
-                const savedFriends = localStorage.getItem(`friends_${userId}`);
-                if (savedFriends) {
-                    setFriends(JSON.parse(savedFriends));
-                }
-            }
+            const handleFileDrop = (event) => {
+                event.preventDefault();
+                handleFileUpload(event.dataTransfer.files);
+            };
 
-            function loadMessages(chatId) {
-                const savedMessages = localStorage.getItem(`chat_${chatId}`);
-                if (savedMessages) {
-                    setMessages(JSON.parse(savedMessages));
-                }
-            }
+            const handleFileUpload = (files) => {
+                const newAttachments = Array.from(files).map(file => ({
+                    id: Date.now() + Math.random(),
+                    file,
+                    type: file.type.startsWith('image/') ? 'image' : 'file',
+                    url: URL.createObjectURL(file)
+                }));
+                setAttachments([...attachments, ...newAttachments]);
+            };
 
-            function handleSignup(e) {
-                e.preventDefault();
-                setLoading(true);
-                setError('');
+            // Group chat functions
+            const handleCreateGroup = () => {
+                if (!newGroupName.trim() || selectedGroupMembers.length === 0) return;
 
-                if (password !== confirmPassword) {
-                    setError('Passwords do not match');
-                    setLoading(false);
-                    return;
-                }
-
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                
-                if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-                    setError('Username already taken');
-                    setLoading(false);
-                    return;
-                }
-
-                const newUser = {
-                    id: Date.now().toString(),
-                    username,
-                    password,
+                const groupId = `group_${Date.now()}`;
+                const newGroup = {
+                    id: groupId,
+                    name: newGroupName,
+                    members: [...selectedGroupMembers, currentUser.id],
+                    chatId: `chat_${groupId}`,
+                    isGroup: true,
+                    createdBy: currentUser.id,
                     createdAt: new Date().toISOString()
                 };
 
-                users.push(newUser);
-                localStorage.setItem('users', JSON.stringify(users));
-                localStorage.setItem('currentUser', JSON.stringify(newUser));
-                localStorage.setItem(`friends_${newUser.id}`, '[]');
-                
-                setCurrentUser(newUser);
-                setFriends([]);
-                setLoading(false);
-                setView('chat');
-            }
+                setGroups([...groups, newGroup]);
+                localStorage.setItem(`groups_${currentUser.id}`, JSON.stringify([...groups, newGroup]));
+                localStorage.setItem(`chat_${newGroup.chatId}`, '[]');
 
-            function handleLogin(e) {
+                setNewGroupName('');
+                setSelectedGroupMembers([]);
+                setShowGroupModal(false);
+            };
+
+            // Message handling functions
+            const handleSendMessage = (e) => {
                 e.preventDefault();
-                setLoading(true);
-                setError('');
-
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const user = users.find(u => u.username === username && u.password === password);
-                
-                if (user) {
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    setCurrentUser(user);
-                    loadFriends(user.id);
-                    setView('chat');
-                } else {
-                    setError('Invalid username or password');
-                }
-                setLoading(false);
-            }
-
-            function handleAddFriend(e) {
-                e.preventDefault();
-                if (!newFriendUsername.trim()) return;
-
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const friend = users.find(u => u.username.toLowerCase() === newFriendUsername.toLowerCase());
-
-                if (!friend) {
-                    setError('User not found');
-                    return;
-                }
-
-                if (friend.id === currentUser.id) {
-                    setError('Cannot add yourself as friend');
-                    return;
-                }
-
-                const currentFriends = JSON.parse(localStorage.getItem(`friends_${currentUser.id}`) || '[]');
-                if (currentFriends.some(f => f.id === friend.id)) {
-                    setError('Already friends with this user');
-                    return;
-                }
-
-                // Create chat ID for these two users
-                const chatId = `chat_${currentUser.id}_${friend.id}`;
-                
-                // Add friend to current user's friends list
-                const newFriend = {
-                    id: friend.id,
-                    username: friend.username,
-                    chatId
-                };
-                
-                currentFriends.push(newFriend);
-                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(currentFriends));
-                
-                // Add current user to friend's friends list
-                const friendsFriends = JSON.parse(localStorage.getItem(`friends_${friend.id}`) || '[]');
-                friendsFriends.push({
-                    id: currentUser.id,
-                    username: currentUser.username,
-                    chatId
-                });
-                localStorage.setItem(`friends_${friend.id}`, JSON.stringify(friendsFriends));
-                
-                // Initialize empty chat
-                localStorage.setItem(`chat_${chatId}`, '[]');
-                
-                setFriends(currentFriends);
-                setNewFriendUsername('');
-                setError('');
-            }
-
-            function handleSendMessage(e) {
-                e.preventDefault();
-                if (!newMessage.trim() || !activeChat) return;
+                if ((!newMessage.trim() && attachments.length === 0) || !activeChat) return;
 
                 const message = {
                     id: Date.now().toString(),
                     text: newMessage,
                     sender: currentUser.username,
                     senderId: currentUser.id,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    attachments: attachments.map(att => ({
+                        type: att.type,
+                        url: att.url,
+                        name: att.file.name
+                    })),
+                    status: 'sent'
                 };
 
-                const chatMessages = JSON.parse(localStorage.getItem(`chat_${activeChat}`) || '[]');
-                chatMessages.push(message);
+                const chatMessages = [...messages, message];
                 localStorage.setItem(`chat_${activeChat}`, JSON.stringify(chatMessages));
-                
                 setMessages(chatMessages);
                 setNewMessage('');
-            }
+                setAttachments([]);
+                setShowEmojiPicker(false);
+            };
 
-            function handleLogout() {
-                localStorage.removeItem('currentUser');
-                setCurrentUser(null);
-                setFriends([]);
-                setActiveChat(null);
-                setMessages([]);
-                setView('welcome');
-                setUsername('');
-                setPassword('');
-                setError('');
-            }
+            // Render functions for different components
+            const renderWelcomeScreen = () => (
+                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md fade-in">
+                        <div className="text-center mb-8">
+                            <img 
+                                src="/api/placeholder/100/100"
+                                alt="Toro Chat Logo" 
+                                className="mx-auto mb-4 w-24 h-24"
+                            />
+                            <h1 className="text-4xl font-bold text-[#8B4513] mb-2">TORO CHAT</h1>
+                            <p className="text-gray-500">Connect with friends securely</p>
+                        </div>
 
-            // Welcome Screen
-            if (view === 'welcome') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-6xl mb-4 animate-bounce">🐂</div>
-                                <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
-                                <p className="text-gray-500">Private messaging unleashed</p>
-                            </div>
-
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 transition-colors"
-                                >
-                                    Sign Up
-                                </button>
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50 transition-colors"
-                                >
-                                    Login
-                                </button>
-                            </div>
+                        <div className="space-y-4">
+                            <button
+                                onClick={() => setView('signup')}
+                                className="w-full bg-[#8B4513] text-white p-4 rounded-lg hover:bg-[#654321] transition-colors"
+                            >
+                                Create Account
+                            </button>
+                            <button
+                                onClick={() => setView('login')}
+                                className="w-full border-2 border-[#8B4513] text-[#8B4513] p-4 rounded-lg hover:bg-[#8B4513] hover:text-white transition-colors"
+                            >
+                                Sign In
+                            </button>
                         </div>
                     </div>
-                );
-            }
+                </div>
+            );
 
-            // Signup Screen
-            if (view === 'signup') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
-                                <p className="text-gray-500">Create your account</p>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
-
-                            <form onSubmit={handleSignup} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Choose a username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Create a password"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Confirm Password</label>
-                                    <input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Confirm your password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
-                                >
-                                    {loading ? 'Creating Account...' : 'Create Account'}
-                                </button>
-                            </form>
-
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('login')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Already have an account? Login
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Login Screen
-            if (view === 'login') {
-                return (
-                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
-                                <p className="text-gray-500">Login to your account</p>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                    {error}
-                                </div>
-                            )}
-
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Username</label>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter username"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2">Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter password"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
-                                >
-                                    {loading ? 'Logging in...' : 'Login'}
-                                </button>
-                            </form>
-
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => setView('signup')}
-                                    className="text-red-500 hover:text-red-600"
-                                >
-                                    Need an account? Sign up
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // Chat Screen
-            return (
+            const renderChatScreen = () => (
                 <div className="h-screen flex">
-                    {/* Friends Sidebar */}
-                    <div className="w-64 bg-white border-r flex flex-col">
+                    {/* Sidebar */}
+                    <div className="w-80 bg-white border-r flex flex-col">
+                        {/* User Profile */}
                         <div className="p-4 toro-gradient text-white">
-                            <div className="flex items-center space-x-2">
-                                <span className="text-2xl">🐂</span>
-                                <h1 className="font-bold">Toro Chat</h1>
+                            <div className="flex items-center space-x-3">
+                                <img 
+                                    src="/api/placeholder/40/40"
+                                    alt="Profile" 
+                                    className="w-10 h-10 rounded-full"
+                                />
+                                <div>
+                                    <h2 className="font-bold">@{currentUser?.username}</h2>
+                                    <p className="text-sm opacity-75">Online</p>
+                                </div>
                             </div>
-                            <p className="text-sm mt-2">@{currentUser?.username}</p>
                         </div>
 
-                        {/* Add Friend Form */}
+                        {/* Add Friend & Create Group */}
                         <div className="p-4 border-b">
-                            <form onSubmit={handleAddFriend}>
-                                <input
-                                    type="text"
-                                    value={newFriendUsername}
-                                    onChange={(e) => setNewFriendUsername(e.target.value)}
-                                    placeholder="Add friend by username"
-                                    className="w-full p-2 border rounded-lg text-sm"
-                                />
+                            <div className="flex gap-2 mb-4">
                                 <button
-                                    type="submit"
-                                    className="w-full mt-2 bg-red-500 text-white p-2 rounded-lg text-sm hover:bg-red-600"
+                                    onClick={() => setShowGroupModal(true)}
+                                    className="flex-1 bg-[#8B4513] text-white p-2 rounded-lg text-sm hover:bg-[#654321]"
+                                >
+                                    New Group
+                                </button>
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex-1 border border-[#8B4513] text-[#8B4513] p-2 rounded-lg text-sm hover:bg-[#8B4513] hover:text-white"
                                 >
                                     Add Friend
                                 </button>
-                            </form>
-                            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+                            </div>
+
+                            <input
+                                type="text"
+                                value={newFriendUsername}
+                                onChange={(e) => setNewFriendUsername(e.target.value)}
+                                placeholder="Search friends..."
+                                className="w-full p-2 border rounded-lg text-sm"
+                            />
                         </div>
 
-                        {/* Friends List */}
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <h2 className="text-sm font-semibold text-gray-500 mb-4">Friends</h2>
-                            {friends.map(friend => (
-                                <button
-                                    key={friend.id}
-                                    onClick={() => setActiveChat(friend.chatId)}
-                                    className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 ${
-                                        friend.chatId === activeChat ? 'bg-red-50' : ''
-                                    }`}
-                                >
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                                            <span className="text-sm">🐂</span>
+                        {/* Chats List */}
+                        <div className="flex-1 overflow-y-auto">
+                            {/* Groups */}
+                            {groups.length > 0 && (
+                                <div className="p-4">
+                                    <h3 className="text-sm font-semibold text-gray-500 mb-2">Groups</h3>
+                                    {groups.map(group => (
+                                        <button
+                                            key={group.id}
+                                            onClick={() => setActiveChat(group.chatId)}
+                                            className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 ${
+                                                group.chatId === activeChat ? 'bg-[#8B4513] text-white' : ''
+                                            }`}
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                <div className="group-avatar">
+                                                    {group.name[0].toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium">{group.name}</p>
+                                                    <p className="text-sm opacity-75">
+                                                        {group.members.length} members
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Friends */}
+                            <div className="p-4">
+                                <h3 className="text-sm font-semibold text-gray-500 mb-2">Friends</h3>
+                                {friends.map(friend => (
+                                    <button
+                                        key={friend.id}
+                                        onClick={() => setActiveChat(friend.chatId)}
+                                        className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 ${
+                                            friend.chatId === activeChat ? 'bg-[#8B4513] text-white' : ''
+                                        }`}
+                                    >
+                                        <div className="flex items-center space-x-3">
+                                            <div className="w-10 h-10 bg-[#8B4513] rounded-full flex items-center justify-center text-white">
+                                                {friend.username[0].toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium">@{friend.username}</p>
+                                                <div className="flex items-center text-sm">
+                                                    <span className={`online-status ${onlineUsers[friend.id] ? 'online' : 'offline'}`}></span>
+                                                    <span className="opacity-75">{onlineUsers[friend.id] ? 'Online' : 'Offline'}</span>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUnfriend(friend.id);
+                                                }}
+                                                className="ml-auto text-sm opacity-0 group-hover:opacity-100 hover:text-red-500"
+                                            >
+                                                Remove
+                                            </button>
                                         </div>
-                                        <div>
-                                            <p className="font-medium">@{friend.username}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Logout */}
                         <div className="p-4 border-t">
                             <button
                                 onClick={handleLogout}
-                                className="w-full text-red-500 hover:text-red-600"
+                                className="w-full text-red-500 hover:text-red-600 font-medium"
                             >
-                                Logout
+                                Sign Out
                             </button>
                         </div>
                     </div>
@@ -458,60 +428,264 @@
                     <div className="flex-1 flex flex-col bg-gray-50">
                         {activeChat ? (
                             <>
+                                {/* Chat Header */}
+                                <div className="p-4 bg-white border-b flex items-center justify-between">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 bg-[#8B4513] rounded-full flex items-center justify-center text-white">
+                                            {getCurrentChatName()[0].toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <h2 className="font-bold">{getCurrentChatName()}</h2>
+                                            <p className="text-sm text-gray-500">
+                                                {isGroupChat() ? `${getGroupMembers().length} members` : 'Direct Message'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-4">
+                                        <button
+                                            onClick={() => setShowChatInfo(true)}
+                                            className="p-2 hover:bg-gray-100 rounded-full"
+                                        >
+                                            <span className="text-xl">ℹ️</span>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* Messages */}
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                <div 
+                                    ref={chatContainerRef}
+                                    className="flex-1 overflow-y-auto p-4 space-y-4"
+                                >
                                     {messages.map(message => (
                                         <div
                                             key={message.id}
                                             className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
                                         >
-                                            <div
-                                                className={`message-bubble max-w-[70%] p-3 rounded-lg ${
-                                                    message.senderId === currentUser.id
-                                                        ? 'bg-red-500 text-white'
-                                                        : 'bg-white shadow'
-                                                }`}
-                                            >
-                                                <p className="font-bold text-sm mb-1">@{message.sender}</p>
-                                                <p className="break-words">{message.text}</p>
-                                                <p className="text-xs opacity-75 mt-1">
-                                                    {new Date(message.timestamp).toLocaleTimeString()}
-                                                </p>
+                                            <div className="max-w-[70%]">
+                                                <div
+                                                    className={`message-bubble p-3 rounded-lg ${
+                                                        message.senderId === currentUser.id
+                                                            ? 'bg-[#8B4513] text-white'
+                                                            : 'bg-white shadow'
+                                                    }`}
+                                                >
+                                                    {message.senderId !== currentUser.id && (
+                                                        <p className="font-bold text-sm mb-1">@{message.sender}</p>
+                                                    )}
+                                                    <p className="break-words">{message.text}</p>
+                                                    
+                                                    {/* Attachments */}
+                                                    {message.attachments?.length > 0 && (
+                                                        <div className="mt-2 space-y-2">
+                                                            {message.attachments.map(att => (
+                                                                <div key={att.url} className="rounded overflow-hidden">
+                                                                    {att.type === 'image' ? (
+                                                                        <img 
+                                                                            src={att.url} 
+                                                                            alt="Attachment" 
+                                                                            className="max-w-full rounded"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="bg-gray-100 p-2 rounded flex items-center space-x-2">
+                                                                            <span>📎</span>
+                                                                            <span>{att.name}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <div className="flex items-center justify-between mt-2 text-xs opacity-75">
+                                                        <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
+                                                        {message.senderId === currentUser.id && (
+                                                            <span>{message.status === 'seen' ? '👁️' : '✓'}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
+                                    
+                                    {/* Typing Indicator */}
+                                    {Object.keys(typingUsers).length > 0 && (
+                                        <div className="typing-indicator">
+                                            {Object.keys(typingUsers).map(userId => (
+                                                <span key={userId}>{typingUsers[userId]} is typing...</span>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Message Input */}
-                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                                    <div className="flex space-x-2">
-                                        <input
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
-                                            placeholder="Type a message..."
-                                            className="flex-1 p-2 border rounded-full focus:ring-2 focus:ring-red-500"
-                                        />
-                                        <button
-                                            type="submit"
-                                            className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 flex items-center space-x-2"
-                                        >
-                                            <span>Send</span>
-                                            <span>⚡</span>
-                                        </button>
-                                    </div>
-                                </form>
+                                <div className="p-4 bg-white border-t">
+                                    {/* Attachment Preview */}
+                                    {attachments.length > 0 && (
+                                        <div className="attachment-preview">
+                                            {attachments.map(att => (
+                                                <div key={att.id} className="relative">
+                                                    {att.type === 'image' ? (
+                                                        <img src={att.url} alt="Preview" />
+                                                    ) : (
+                                                        <div className="file-preview">📎 {att.file.name}</div>
+                                                    )}
+                                                    <button
+                                                        onClick={() => setAttachments(attachments.filter(a => a.id !== att.id))}
+                                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <form onSubmit={handleSendMessage} className="flex items-end space-x-2">
+                                        <div className="flex-1 relative">
+                                            <div
+                                                className="file-drop-zone"
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={handleFileDrop}
+                                            >
+                                                <input
+                                                    type="text"
+                                                    value={newMessage}
+                                                    onChange={(e) => {
+                                                        setNewMessage(e.target.value);
+                                                        // Simulate typing indicator
+                                                        if (e.target.value) {
+                                                            setTypingUsers({
+                                                                ...typingUsers,
+                                                                [currentUser.id]: currentUser.username
+                                                            });
+                                                        } else {
+                                                            const { [currentUser.id]: _, ...rest } = typingUsers;
+                                                            setTypingUsers(rest);
+                                                        }
+                                                    }}
+                                                    placeholder="Type a message..."
+                                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#8B4513] focus:border-[#8B4513]"
+                                                />
+                                            </div>
+                                            
+                                            {showEmojiPicker && (
+                                                <div className="emoji-picker">
+                                                    <emoji-picker
+                                                        onEmojiSelect={emoji => {
+                                                            setNewMessage(newMessage + emoji.native);
+                                                            setShowEmojiPicker(false);
+                                                        }}
+                                                    ></emoji-picker>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex space-x-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                                className="p-3 hover:bg-gray-100 rounded-full"
+                                            >
+                                                😊
+                                            </button>
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                onChange={handleFileSelect}
+                                                multiple
+                                                className="hidden"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="p-3 hover:bg-gray-100 rounded-full"
+                                            >
+                                                📎
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                className="bg-[#8B4513] text-white px-6 py-3 rounded-full hover:bg-[#654321] flex items-center space-x-2"
+                                            >
+                                                <span>Send</span>
+                                                <span>➤</span>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
                             </>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-gray-500">
                                 <div className="text-center">
-                                    <div className="text-6xl mb-4">🐂</div>
-                                    <p>Select a friend to start chatting</p>
+                                    <img 
+                                        src="/api/placeholder/120/120"
+                                        alt="Toro Chat Logo" 
+                                        className="mx-auto mb-4 w-32 h-32"
+                                    />
+                                    <p className="text-xl font-medium">Select a chat to start messaging</p>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
+            );
+
+            // Main render
+            return (
+                <>
+                    {view === 'welcome' && renderWelcomeScreen()}
+                    {view === 'signup' && renderSignupScreen()}
+                    {view === 'login' && renderLoginScreen()}
+                    {view === 'chat' && renderChatScreen()}
+                    
+                    {/* Group Creation Modal */}
+                    {showGroupModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                                <h2 className="text-2xl font-bold mb-4">Create New Group</h2>
+                                <input
+                                    type="text"
+                                    value={newGroupName}
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                    placeholder="Group Name"
+                                    className="w-full p-3 border rounded-lg mb-4"
+                                />
+                                <div className="max-h-60 overflow-y-auto mb-4">
+                                    {friends.map(friend => (
+                                        <label key={friend.id} className="flex items-center p-2 hover:bg-gray-50 rounded">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedGroupMembers.includes(friend.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setSelectedGroupMembers([...selectedGroupMembers, friend.id]);
+                                                    } else {
+                                                        setSelectedGroupMembers(selectedGroupMembers.filter(id => id !== friend.id));
+                                                    }
+                                                }}
+                                                className="mr-3"
+                                            />
+                                            {friend.username}
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="flex space-x-3">
+                                    <button
+                                        onClick={handleCreateGroup}
+                                        className="flex-1 bg-[#8B4513] text-white p-3 rounded-lg hover:bg-[#654321]"
+                                    >
+                                        Create Group
+                                    </button>
+                                    <button
+                                        onClick={() => setShowGroupModal(false)}
+                                        className="flex-1 border border-[#8B4513] text-[#8B4513] p-3 rounded-lg hover:bg-[#8B4513] hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             );
         }
 
