@@ -7,15 +7,34 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .toro-gradient {
+            background: linear-gradient(135deg, #8B4513 0%, #654321 100%);
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         function App() {
             return (
-                <div>
-                    <h1>Hello Toro Chat!</h1>
-                    <p>If you can see this, React is working!</p>
+                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-[#8B4513] mb-2">TORO CHAT</h1>
+                            <p className="text-gray-500">Simple messaging app</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <button className="w-full bg-[#8B4513] text-white p-4 rounded-lg hover:bg-[#654321]">
+                                Sign Up
+                            </button>
+                            <button className="w-full border-2 border-[#8B4513] text-[#8B4513] p-4 rounded-lg hover:bg-[#8B4513] hover:text-white">
+                                Login
+                            </button>
+                        </div>
+                    </div>
                 </div>
             );
         }
