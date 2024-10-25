@@ -22,6 +22,25 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
+        .emoji-menu {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 5px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .emoji-button {
+            padding: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .emoji-button:hover {
+            background: #f3f4f6;
+            transform: scale(1.2);
+        }
     </style>
 </head>
 <body>
@@ -37,8 +56,15 @@
             const [newMessage, setNewMessage] = useState('');
             const [activeChat, setActiveChat] = useState(null);
             const [users, setUsers] = useState([]);
+            const [editingMessage, setEditingMessage] = useState(null);
+            const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+            const [selectedFile, setSelectedFile] = useState(null);
+            
+            const fileInputRef = useRef();
+            const chatContainerRef = useRef();
 
-            // Load existing data on startup
+            const EMOJIS = ["😊", "😂", "❤️", "👍", "🔥", "🐂", "✨", "💪", "🎉", "🌟"];
+
             useEffect(() => {
                 const savedUsers = JSON.parse(localStorage.getItem('users') || '[]');
                 setUsers(savedUsers);
@@ -49,6 +75,49 @@
                     setView('chat');
                 }
             }, []);
+
+            useEffect(() => {
+                if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+                }
+            }, [messages]);
+
+            useEffect(() => {
+                const handleKeyPress = (e) => {
+                    if (e.ctrlKey) {
+                        if (e.key === 'e' && editingMessage) {
+                            handleEditMessage(editingMessage);
+                        }
+                    }
+                };
+                window.addEventListener('keydown', handleKeyPress);
+                return () => window.removeEventListener('keydown', handleKeyPress);
+            }, [editingMessage]);
+
+            async function handleFileSelect(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                        setError('File too large (max 5MB)');
+                        return;
+                    }
+                    const base64 = await fileToBase64(file);
+                    setSelectedFile({
+                        name: file.name,
+                        type: file.type,
+                        data: base64
+                    });
+                }
+            }
+
+            function fileToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                });
+            }
 
             function handleSignup(e) {
                 e.preventDefault();
@@ -78,52 +147,115 @@
                 }
             }
 
+            function handleLogout() {
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
+                setActiveChat(null);
+                setMessages([]);
+                setUsername('');
+                setPassword('');
+                setView('welcome');
+            }
+
             function handleSendMessage(e) {
                 e.preventDefault();
-                if (!newMessage.trim()) return;
+                if ((!newMessage.trim() && !selectedFile) || !activeChat) return;
 
                 const message = {
                     id: Date.now().toString(),
                     text: newMessage,
                     sender: currentUser.id,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    file: selectedFile,
+                    isEdited: false
                 };
 
-                const chatId = `chat_${currentUser.id}_${activeChat.id}`;
+                const chatId = `chat_${[currentUser.id, activeChat.id].sort().join('_')}`;
                 const chatMessages = JSON.parse(localStorage.getItem(chatId) || '[]');
                 chatMessages.push(message);
                 localStorage.setItem(chatId, JSON.stringify(chatMessages));
                 
                 setMessages(chatMessages);
                 setNewMessage('');
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+            }
+
+            function handleEditMessage(message) {
+                if (message.sender !== currentUser.id) return;
+                setEditingMessage(message);
+                setNewMessage(message.text);
+            }
+
+            function handleSaveEdit() {
+                if (!editingMessage || !newMessage.trim()) return;
+
+                const updatedMessages = messages.map(msg =>
+                    msg.id === editingMessage.id
+                        ? { ...msg, text: newMessage, isEdited: true }
+                        : msg
+                );
+
+                const chatId = `chat_${[currentUser.id, activeChat.id].sort().join('_')}`;
+                localStorage.setItem(chatId, JSON.stringify(updatedMessages));
+                setMessages(updatedMessages);
+                setEditingMessage(null);
+                setNewMessage('');
+            }
+
+            function handleDeleteMessage(messageId) {
+                const updatedMessages = messages.filter(msg => msg.id !== messageId);
+                const chatId = `chat_${[currentUser.id, activeChat.id].sort().join('_')}`;
+                localStorage.setItem(chatId, JSON.stringify(updatedMessages));
+                setMessages(updatedMessages);
             }
 
             function startChat(user) {
-                const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
-                const messages = JSON.parse(localStorage.getItem(chatId) || '[]');
-                setMessages(messages);
                 setActiveChat(user);
+                const chatId = `chat_${[currentUser.id, user.id].sort().join('_')}`;
+                const chatMessages = JSON.parse(localStorage.getItem(chatId) || '[]');
+                setMessages(chatMessages);
             }
 
-            function handleLogout() {
-                localStorage.removeItem('currentUser');
-                setCurrentUser(null);
-                setView('welcome');
-                setUsername('');
-                setPassword('');
+            // Welcome Screen
+            if (view === 'welcome') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4">🐂</div>
+                                <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
+                                <p className="text-gray-500">Welcome!</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <button
+                                    onClick={() => setView('signup')}
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                                >
+                                    Sign Up
+                                </button>
+                                <button
+                                    onClick={() => setView('login')}
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50"
+                                >
+                                    Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
             }
 
-            // Previous welcome, signup, and login screens stay the same...
-            if (view === 'welcome' || view === 'signup' || view === 'login') {
-                // ... (keep all the previous login/signup code)
-            }
+            // Login/Signup screens remain the same...
 
-            // Enhanced Chat Screen
+            // Chat Screen
             return (
                 <div className="h-screen flex">
                     {/* Sidebar */}
                     <div className="w-80 bg-white border-r flex flex-col">
-                        {/* Header */}
                         <div className="p-6 toro-gradient">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-3">
@@ -158,7 +290,7 @@
                         {/* Logout */}
                         <button
                             onClick={handleLogout}
-                            className="p-4 text-red-500 hover:bg-red-50"
+                            className="p-4 text-red-500 hover:bg-red-50 font-medium"
                         >
                             Logout
                         </button>
@@ -174,7 +306,7 @@
                                 </div>
 
                                 {/* Messages */}
-                                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
                                     {messages.map(message => (
                                         <div
                                             key={message.id}
@@ -182,38 +314,139 @@
                                                 message.sender === currentUser.id ? 'justify-end' : 'justify-start'
                                             }`}
                                         >
-                                            <div className={`message-bubble rounded-lg ${
-                                                message.sender === currentUser.id
-                                                    ? 'bg-red-500 text-white'
-                                                    : 'bg-white'
-                                            }`}>
-                                                <p className="text-lg mb-2">{message.text}</p>
-                                                <p className="text-sm opacity-75">
-                                                    {new Date(message.timestamp).toLocaleTimeString([], { 
-                                                        hour: '2-digit', 
-                                                        minute: '2-digit' 
-                                                    })}
-                                                </p>
+                                            <div className="group relative">
+                                                <div className={`message-bubble rounded-lg ${
+                                                    message.sender === currentUser.id
+                                                        ? 'bg-red-500 text-white'
+                                                        : 'bg-white'
+                                                }`}>
+                                                    {message.text && (
+                                                        <p className="text-lg mb-2">{message.text}</p>
+                                                    )}
+                                                    
+                                                    {message.file && (
+                                                        <div className="mt-2">
+                                                            {message.file.type.startsWith('image/') ? (
+                                                                <img 
+                                                                    src={message.file.data} 
+                                                                    alt="attachment"
+                                                                    className="max-w-sm rounded-lg"
+                                                                />
+                                                            ) : (
+                                                                <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded-lg">
+                                                                    <span>📎</span>
+                                                                    <span>{message.file.name}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <p className="text-sm opacity-75">
+                                                        {new Date(message.timestamp).toLocaleTimeString([], { 
+                                                            hour: '2-digit', 
+                                                            minute: '2-digit' 
+                                                        })}
+                                                        {message.isEdited && ' (edited)'}
+                                                    </p>
+
+                                                    {message.sender === currentUser.id && (
+                                                        <div className="absolute -right-12 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                onClick={() => handleEditMessage(message)}
+                                                                className="p-2 hover:bg-gray-100 rounded-full"
+                                                            >
+                                                                ✏️
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteMessage(message.id)}
+                                                                className="p-2 hover:bg-gray-100 rounded-full"
+                                                            >
+                                                                🗑️
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
 
                                 {/* Message Input */}
-                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                                    <div className="flex space-x-3">
+                                <form onSubmit={editingMessage ? handleSaveEdit : handleSendMessage} className="p-4 bg-white border-t">
+                                    {selectedFile && (
+                                        <div className="mb-2 p-2 bg-gray-100 rounded-lg flex items-center justify-between">
+                                            <span>{selectedFile.name}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedFile(null)}
+                                                className="text-red-500 hover:bg-red-50 p-1 rounded"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center space-x-3">
+                                        {/* File Upload */}
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="p-2 hover:bg-gray-100 rounded-full"
+                                            title="Attach file"
+                                        >
+                                            📎
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleFileSelect}
+                                            className="hidden"
+                                            accept="image/*,.pdf,.doc,.docx"
+                                        />
+
+                                        {/* Emoji Picker */}
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                                className="p-2 hover:bg-gray-100 rounded-full"
+                                                title="Add emoji"
+                                            >
+                                                😊
+                                            </button>
+                                            {showEmojiPicker && (
+                                                <div className="absolute bottom-12 right-0 emoji-menu">
+                                                    {EMOJIS.map(emoji => (
+                                                        <button
+                                                            key={emoji}
+                                                            type="button"
+                                                            className="emoji-button"
+                                                            onClick={() => {
+                                                                setNewMessage(prev => prev + emoji);
+                                                                setShowEmojiPicker(false);
+                                                            }}
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Message Input */}
                                         <input
                                             type="text"
                                             value={newMessage}
                                             onChange={(e) => setNewMessage(e.target.value)}
-                                            placeholder="Type a message..."
+                                            placeholder={editingMessage ? "Edit message..." : "Type a message..."}
                                             className="flex-1 p-4 border rounded-xl focus:ring-2 focus:ring-red-500 text-lg"
                                         />
+                                        
+                                        {/* Send Button */}
                                         <button
                                             type="submit"
                                             className="bg-red-500 text-white px-8 py-4 rounded-xl hover:bg-red-600 font-medium text-lg flex items-center space-x-2"
                                         >
-                                            <span>Send</span>
+                                            <span>{editingMessage ? 'Save' : 'Send'}</span>
                                             <span>⚡</span>
                                         </button>
                                     </div>
@@ -232,7 +465,7 @@
             );
         }
 
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
