@@ -37,25 +37,49 @@
             const [password, setPassword] = useState('');
             const [confirmPassword, setConfirmPassword] = useState('');
             const [currentUser, setCurrentUser] = useState(null);
-            const [messages, setMessages] = useState([]);
-            const [newMessage, setNewMessage] = useState('');
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
+            
+            // Friend and chat state
+            const [friends, setFriends] = useState([]);
+            const [activeChat, setActiveChat] = useState(null);
+            const [newFriendUsername, setNewFriendUsername] = useState('');
+            const [messages, setMessages] = useState([]);
+            const [newMessage, setNewMessage] = useState('');
 
+            // Load current user and their friends
             useEffect(() => {
-                // Load messages from localStorage
-                const savedMessages = localStorage.getItem('messages');
-                if (savedMessages) {
-                    setMessages(JSON.parse(savedMessages));
-                }
-
-                // Check for logged in user
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
-                    setCurrentUser(JSON.parse(savedUser));
+                    const user = JSON.parse(savedUser);
+                    setCurrentUser(user);
+                    loadFriends(user.id);
                     setView('chat');
                 }
             }, []);
+
+            // Load messages when active chat changes
+            useEffect(() => {
+                if (activeChat) {
+                    loadMessages(activeChat);
+                    const interval = setInterval(() => loadMessages(activeChat), 1000);
+                    return () => clearInterval(interval);
+                }
+            }, [activeChat]);
+
+            function loadFriends(userId) {
+                const savedFriends = localStorage.getItem(`friends_${userId}`);
+                if (savedFriends) {
+                    setFriends(JSON.parse(savedFriends));
+                }
+            }
+
+            function loadMessages(chatId) {
+                const savedMessages = localStorage.getItem(`chat_${chatId}`);
+                if (savedMessages) {
+                    setMessages(JSON.parse(savedMessages));
+                }
+            }
 
             function handleSignup(e) {
                 e.preventDefault();
@@ -64,12 +88,6 @@
 
                 if (password !== confirmPassword) {
                     setError('Passwords do not match');
-                    setLoading(false);
-                    return;
-                }
-
-                if (username.length < 3) {
-                    setError('Username must be at least 3 characters');
                     setLoading(false);
                     return;
                 }
@@ -92,8 +110,10 @@
                 users.push(newUser);
                 localStorage.setItem('users', JSON.stringify(users));
                 localStorage.setItem('currentUser', JSON.stringify(newUser));
+                localStorage.setItem(`friends_${newUser.id}`, '[]');
                 
                 setCurrentUser(newUser);
+                setFriends([]);
                 setLoading(false);
                 setView('chat');
             }
@@ -102,16 +122,14 @@
                 e.preventDefault();
                 setLoading(true);
                 setError('');
-                
+
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const user = users.find(u => 
-                    u.username.toLowerCase() === username.toLowerCase() && 
-                    u.password === password
-                );
+                const user = users.find(u => u.username === username && u.password === password);
                 
                 if (user) {
                     localStorage.setItem('currentUser', JSON.stringify(user));
                     setCurrentUser(user);
+                    loadFriends(user.id);
                     setView('chat');
                 } else {
                     setError('Invalid username or password');
@@ -119,30 +137,88 @@
                 setLoading(false);
             }
 
+            function handleAddFriend(e) {
+                e.preventDefault();
+                if (!newFriendUsername.trim()) return;
+
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const friend = users.find(u => u.username.toLowerCase() === newFriendUsername.toLowerCase());
+
+                if (!friend) {
+                    setError('User not found');
+                    return;
+                }
+
+                if (friend.id === currentUser.id) {
+                    setError('Cannot add yourself as friend');
+                    return;
+                }
+
+                const currentFriends = JSON.parse(localStorage.getItem(`friends_${currentUser.id}`) || '[]');
+                if (currentFriends.some(f => f.id === friend.id)) {
+                    setError('Already friends with this user');
+                    return;
+                }
+
+                // Create chat ID for these two users
+                const chatId = `chat_${currentUser.id}_${friend.id}`;
+                
+                // Add friend to current user's friends list
+                const newFriend = {
+                    id: friend.id,
+                    username: friend.username,
+                    chatId
+                };
+                
+                currentFriends.push(newFriend);
+                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(currentFriends));
+                
+                // Add current user to friend's friends list
+                const friendsFriends = JSON.parse(localStorage.getItem(`friends_${friend.id}`) || '[]');
+                friendsFriends.push({
+                    id: currentUser.id,
+                    username: currentUser.username,
+                    chatId
+                });
+                localStorage.setItem(`friends_${friend.id}`, JSON.stringify(friendsFriends));
+                
+                // Initialize empty chat
+                localStorage.setItem(`chat_${chatId}`, '[]');
+                
+                setFriends(currentFriends);
+                setNewFriendUsername('');
+                setError('');
+            }
+
             function handleSendMessage(e) {
                 e.preventDefault();
-                if (!newMessage.trim()) return;
+                if (!newMessage.trim() || !activeChat) return;
 
                 const message = {
                     id: Date.now().toString(),
                     text: newMessage,
                     sender: currentUser.username,
+                    senderId: currentUser.id,
                     timestamp: new Date().toISOString()
                 };
 
-                const updatedMessages = [...messages, message];
-                setMessages(updatedMessages);
-                localStorage.setItem('messages', JSON.stringify(updatedMessages));
+                const chatMessages = JSON.parse(localStorage.getItem(`chat_${activeChat}`) || '[]');
+                chatMessages.push(message);
+                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(chatMessages));
+                
+                setMessages(chatMessages);
                 setNewMessage('');
             }
 
             function handleLogout() {
                 localStorage.removeItem('currentUser');
                 setCurrentUser(null);
+                setFriends([]);
+                setActiveChat(null);
+                setMessages([]);
                 setView('welcome');
                 setUsername('');
                 setPassword('');
-                setConfirmPassword('');
                 setError('');
             }
 
@@ -153,10 +229,8 @@
                         <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
                                 <div className="text-6xl mb-4 animate-bounce">🐂</div>
-                                <h1 className="text-4xl font-bold text-red-600 mb-2">
-                                    TORO CHAT
-                                </h1>
-                                <p className="text-gray-500">Choose your path</p>
+                                <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
+                                <p className="text-gray-500">Private messaging unleashed</p>
                             </div>
 
                             <div className="space-y-4">
@@ -185,9 +259,7 @@
                         <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
                                 <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">
-                                    Join Toro Chat
-                                </h1>
+                                <h1 className="text-3xl font-bold text-red-600 mb-2">Join Toro Chat</h1>
                                 <p className="text-gray-500">Create your account</p>
                             </div>
 
@@ -204,10 +276,9 @@
                                         type="text"
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
                                         placeholder="Choose a username"
                                         required
-                                        minLength={3}
                                     />
                                 </div>
                                 <div>
@@ -216,10 +287,9 @@
                                         type="password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
                                         placeholder="Create a password"
                                         required
-                                        minLength={6}
                                     />
                                 </div>
                                 <div>
@@ -228,7 +298,7 @@
                                         type="password"
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
                                         placeholder="Confirm your password"
                                         required
                                     />
@@ -236,7 +306,7 @@
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors"
+                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
                                 >
                                     {loading ? 'Creating Account...' : 'Create Account'}
                                 </button>
@@ -244,10 +314,7 @@
 
                             <div className="mt-6 text-center">
                                 <button
-                                    onClick={() => {
-                                        setError('');
-                                        setView('login');
-                                    }}
+                                    onClick={() => setView('login')}
                                     className="text-red-500 hover:text-red-600"
                                 >
                                     Already have an account? Login
@@ -265,9 +332,7 @@
                         <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
                                 <div className="text-5xl mb-4">🐂</div>
-                                <h1 className="text-3xl font-bold text-red-600 mb-2">
-                                    Welcome Back
-                                </h1>
+                                <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
                                 <p className="text-gray-500">Login to your account</p>
                             </div>
 
@@ -284,7 +349,7 @@
                                         type="text"
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
                                         placeholder="Enter username"
                                         required
                                     />
@@ -295,7 +360,7 @@
                                         type="password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500"
                                         placeholder="Enter password"
                                         required
                                     />
@@ -303,7 +368,7 @@
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors"
+                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
                                 >
                                     {loading ? 'Logging in...' : 'Login'}
                                 </button>
@@ -311,10 +376,7 @@
 
                             <div className="mt-6 text-center">
                                 <button
-                                    onClick={() => {
-                                        setError('');
-                                        setView('signup');
-                                    }}
+                                    onClick={() => setView('signup')}
                                     className="text-red-500 hover:text-red-600"
                                 >
                                     Need an account? Sign up
@@ -327,69 +389,128 @@
 
             // Chat Screen
             return (
-                <div className="h-screen flex flex-col">
-                    {/* Header */}
-                    <div className="toro-gradient p-4 text-white">
-                        <div className="flex items-center justify-between">
+                <div className="h-screen flex">
+                    {/* Friends Sidebar */}
+                    <div className="w-64 bg-white border-r flex flex-col">
+                        <div className="p-4 toro-gradient text-white">
                             <div className="flex items-center space-x-2">
                                 <span className="text-2xl">🐂</span>
-                                <h1 className="text-xl font-bold">Toro Chat</h1>
+                                <h1 className="font-bold">Toro Chat</h1>
                             </div>
-                            <div className="flex items-center space-x-4">
-                                <span>@{currentUser?.username}</span>
-                                <button
-                                    onClick={handleLogout}
-                                    className="text-sm hover:text-red-200 transition-colors"
-                                >
-                                    Logout
-                                </button>
-                            </div>
+                            <p className="text-sm mt-2">@{currentUser?.username}</p>
                         </div>
-                    </div>
 
-                    {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                        {messages.map(message => (
-                            <div
-                                key={message.id}
-                                className={`flex ${message.sender === currentUser?.username ? 'justify-end' : 'justify-start'}`}
-                            >
-                                <div
-                                    className={`message-bubble max-w-[70%] p-3 rounded-lg ${
-                                        message.sender === currentUser?.username
-                                            ? 'bg-red-500 text-white'
-                                            : 'bg-white shadow'
+                        {/* Add Friend Form */}
+                        <div className="p-4 border-b">
+                            <form onSubmit={handleAddFriend}>
+                                <input
+                                    type="text"
+                                    value={newFriendUsername}
+                                    onChange={(e) => setNewFriendUsername(e.target.value)}
+                                    placeholder="Add friend by username"
+                                    className="w-full p-2 border rounded-lg text-sm"
+                                />
+                                <button
+                                    type="submit"
+                                    className="w-full mt-2 bg-red-500 text-white p-2 rounded-lg text-sm hover:bg-red-600"
+                                >
+                                    Add Friend
+                                </button>
+                            </form>
+                            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+                        </div>
+
+                        {/* Friends List */}
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <h2 className="text-sm font-semibold text-gray-500 mb-4">Friends</h2>
+                            {friends.map(friend => (
+                                <button
+                                    key={friend.id}
+                                    onClick={() => setActiveChat(friend.chatId)}
+                                    className={`w-full p-3 rounded-lg mb-2 text-left hover:bg-gray-50 ${
+                                        friend.chatId === activeChat ? 'bg-red-50' : ''
                                     }`}
                                 >
-                                    <p className="font-bold text-sm mb-1">@{message.sender}</p>
-                                    <p className="break-words">{message.text}</p>
-                                    <p className="text-xs opacity-75 mt-1">
-                                        {new Date(message.timestamp).toLocaleTimeString()}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                            <span className="text-sm">🐂</span>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">@{friend.username}</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
 
-                    {/* Message Input */}
-                    <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                        <div className="flex space-x-2">
-                            <input
-                                type="text"
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                placeholder="Type a message..."
-                                className="flex-1 p-2 border rounded-full focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
+                        {/* Logout */}
+                        <div className="p-4 border-t">
                             <button
-                                type="submit"
-className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition-colors flex items-center space-x-2"
+                                onClick={handleLogout}
+                                className="w-full text-red-500 hover:text-red-600"
                             >
-                                <span>Send</span>
-                                <span>⚡</span>
+                                Logout
                             </button>
                         </div>
-                    </form>
+                    </div>
+
+                    {/* Chat Area */}
+                    <div className="flex-1 flex flex-col bg-gray-50">
+                        {activeChat ? (
+                            <>
+                                {/* Messages */}
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {messages.map(message => (
+                                        <div
+                                            key={message.id}
+                                            className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                            <div
+                                                className={`message-bubble max-w-[70%] p-3 rounded-lg ${
+                                                    message.senderId === currentUser.id
+                                                        ? 'bg-red-500 text-white'
+                                                        : 'bg-white shadow'
+                                                }`}
+                                            >
+                                                <p className="font-bold text-sm mb-1">@{message.sender}</p>
+                                                <p className="break-words">{message.text}</p>
+                                                <p className="text-xs opacity-75 mt-1">
+                                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Message Input */}
+                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
+                                    <div className="flex space-x-2">
+                                        <input
+                                            type="text"
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder="Type a message..."
+                                            className="flex-1 p-2 border rounded-full focus:ring-2 focus:ring-red-500"
+                                        />
+                                        <button
+                                            type="submit"
+                                            className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 flex items-center space-x-2"
+                                        >
+                                            <span>Send</span>
+                                            <span>⚡</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-gray-500">
+                                <div className="text-center">
+                                    <div className="text-6xl mb-4">🐂</div>
+                                    <p>Select a friend to start chatting</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             );
         }
