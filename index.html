@@ -141,16 +141,10 @@
 
             function handleAddFriend(e) {
                 e.preventDefault();
-                if (!newFriendUsername.trim()) {
-                    setError('Please enter a username');
-                    return;
-                }
+                if (!newFriendUsername.trim()) return;
 
                 const users = JSON.parse(localStorage.getItem('users') || '[]');
                 const friend = users.find(u => u.username.toLowerCase() === newFriendUsername.toLowerCase());
-
-                // Debugging: log the friend variable
-                console.log('Friend Found:', friend);
 
                 if (!friend) {
                     setError('User not found');
