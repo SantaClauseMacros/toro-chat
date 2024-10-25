@@ -4,56 +4,44 @@
     <title>Toro Chat 🐂</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐂</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-        
-        body { 
-            font-family: 'Poppins', sans-serif; 
-        }
-        
         .toro-gradient {
             background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
-        }
-
-        .message-bubble {
-            font-size: 1.1rem;
-            padding: 1.25rem 1.5rem;
-            min-width: 200px;
-            transition: all 0.3s ease;
-        }
-        
-        .message-bubble:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect } = React;
-
         function App() {
             const [view, setView] = useState('welcome');
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
+            const [users, setUsers] = useState([]);
+
+            function handleSignup(e) {
+                e.preventDefault();
+                const newUser = { username, password };
+                localStorage.setItem('users', JSON.stringify([...users, newUser]));
+                setView('chat');
+            }
 
             function handleLogin(e) {
                 e.preventDefault();
-                if (username && password) {
+                const savedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+                const user = savedUsers.find(u => u.username === username && u.password === password);
+                if (user) {
                     setView('chat');
                 } else {
-                    setError('Please fill in all fields');
+                    setError('Invalid username or password');
                 }
             }
 
-            // Welcome Screen
             if (view === 'welcome') {
                 return (
                     <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
@@ -61,7 +49,86 @@
                             <div className="text-center mb-8">
                                 <div className="text-6xl mb-4">🐂</div>
                                 <h1 className="text-4xl font-bold text-red-600 mb-2">TORO CHAT</h1>
-                                <p className="text-gray-500">Let's get started!</p>
+                                <p className="text-gray-500">Welcome!</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <button
+                                    onClick={() => setView('signup')}
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                                >
+                                    Sign Up
+                                </button>
+                                <button
+                                    onClick={() => setView('login')}
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-50"
+                                >
+                                    Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'signup') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="text-5xl mb-4">🐂</div>
+                                <h1 className="text-3xl font-bold text-red-600 mb-2">Create Account</h1>
+                            </div>
+
+                            <form onSubmit={handleSignup} className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Username</label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full p-3 border rounded"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Password</label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full p-3 border rounded"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="w-full bg-red-500 text-white p-3 rounded hover:bg-red-600"
+                                >
+                                    Create Account
+                                </button>
+                            </form>
+
+                            <div className="mt-6 text-center">
+                                <button
+                                    onClick={() => setView('login')}
+                                    className="text-red-500 hover:text-red-600"
+                                >
+                                    Already have an account? Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'login') {
+                return (
+                    <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="text-5xl mb-4">🐂</div>
+                                <h1 className="text-3xl font-bold text-red-600 mb-2">Welcome Back</h1>
                             </div>
 
                             {error && (
@@ -78,7 +145,7 @@
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         className="w-full p-3 border rounded"
-                                        placeholder="Enter username"
+                                        required
                                     />
                                 </div>
                                 <div>
@@ -88,7 +155,7 @@
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className="w-full p-3 border rounded"
-                                        placeholder="Enter password"
+                                        required
                                     />
                                 </div>
                                 <button
@@ -98,24 +165,34 @@
                                     Login
                                 </button>
                             </form>
+
+                            <div className="mt-6 text-center">
+                                <button
+                                    onClick={() => setView('signup')}
+                                    className="text-red-500 hover:text-red-600"
+                                >
+                                    Need an account? Sign up
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );
             }
 
-            // Chat Screen
+            // Basic Chat Screen
             return (
                 <div className="min-h-screen">
                     <div className="bg-red-500 text-white p-4">
                         <h1 className="text-xl">Welcome, {username}! 🐂</h1>
                     </div>
                     <div className="p-4">
-                        <p>Chat functionality coming soon...</p>
+                        <p>Chat functionality coming next...</p>
                     </div>
                 </div>
             );
         }
 
+        const { useState } = React;
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
