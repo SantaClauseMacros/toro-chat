@@ -8,78 +8,30 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/emoji-picker-element/1.18.3/index.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/emoji-picker-element/1.18.3/index.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
     <style>
-        .toro-gradient {
+        .gradient {
             background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
-        }
-        .message-bubble {
-            transition: all 0.3s ease;
-        }
-        .message-bubble:hover {
-            transform: translateY(-2px);
-        }
-        .emoji-picker {
-            position: absolute;
-            bottom: 100%;
-            right: 0;
-            z-index: 1000;
-        }
-        .file-drop-zone {
-            border: 2px dashed #ddd;
-            transition: all 0.3s ease;
-        }
-        .file-drop-zone.active {
-            border-color: #FF4B2B;
-            background-color: rgba(255, 75, 43, 0.1);
-        }
-        .preview-image {
-            max-width: 200px;
-            max-height: 200px;
-            object-fit: contain;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        
         function App() {
-            const [view, setView] = useState('welcome');
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
-            const [currentUser, setCurrentUser] = useState(null);
-            const [friends, setFriends] = useState([]);
-            const [newFriendUsername, setNewFriendUsername] = useState('');
-            const [activeChat, setActiveChat] = useState(null);
-            const [messages, setMessages] = useState([]);
-            const [newMessage, setNewMessage] = useState('');
-            const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-            const [dragActive, setDragActive] = useState(false);
-            const [selectedFile, setSelectedFile] = useState(null);
-            const [profileImage, setProfileImage] = useState('');
-            const [isGroup, setIsGroup] = useState(false);
-            const [groupName, setGroupName] = useState('');
-            const [groupMembers, setGroupMembers] = useState([]);
-            
-            const messagesEndRef = useRef(null);
-            const fileInputRef = useRef(null);
-            const chatContainerRef = useRef(null);
+            const [view, setView] = React.useState('welcome');
+            const [username, setUsername] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [currentUser, setCurrentUser] = React.useState(null);
+            const [friends, setFriends] = React.useState([]);
+            const [newFriendUsername, setNewFriendUsername] = React.useState('');
+            const [activeChat, setActiveChat] = React.useState(null);
+            const [messages, setMessages] = React.useState([]);
+            const [newMessage, setNewMessage] = React.useState('');
+            const [error, setError] = React.useState('');
 
-            const scrollToBottom = () => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            };
+            const messagesEndRef = React.useRef(null);
 
-            useEffect(() => {
-                scrollToBottom();
-            }, [messages]);
-
-            // Load user data on mount
-            useEffect(() => {
+            React.useEffect(() => {
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
                     const user = JSON.parse(savedUser);
@@ -89,15 +41,9 @@
                 }
             }, []);
 
-            // Simulated real-time updates
-            useEffect(() => {
-                const interval = setInterval(() => {
-                    if (activeChat) {
-                        loadMessages(activeChat);
-                    }
-                }, 3000);
-                return () => clearInterval(interval);
-            }, [activeChat]);
+            React.useEffect(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [messages]);
 
             const loadFriends = (userId) => {
                 const savedFriends = localStorage.getItem(`friends_${userId}`);
@@ -115,55 +61,88 @@
                 }
             };
 
-            const handleDrag = (e) => {
+            const handleSignup = (e) => {
                 e.preventDefault();
-                e.stopPropagation();
-                if (e.type === "dragenter" || e.type === "dragover") {
-                    setDragActive(true);
-                } else if (e.type === "dragleave") {
-                    setDragActive(false);
-                }
-            };
-
-            const handleDrop = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setDragActive(false);
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
                 
-                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    handleFile(e.dataTransfer.files[0]);
+                if (users.some(u => u.username === username)) {
+                    setError('Username already taken');
+                    return;
                 }
+
+                const newUser = {
+                    id: Date.now().toString(),
+                    username,
+                    password
+                };
+
+                users.push(newUser);
+                localStorage.setItem('users', JSON.stringify(users));
+                localStorage.setItem('currentUser', JSON.stringify(newUser));
+                setCurrentUser(newUser);
+                setView('chat');
             };
 
-            const handleFile = (file) => {
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        setSelectedFile({
-                            preview: e.target.result,
-                            file: file
-                        });
-                    };
-                    reader.readAsDataURL(file);
+            const handleLogin = (e) => {
+                e.preventDefault();
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const user = users.find(u => u.username === username && u.password === password);
+                
+                if (user) {
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    setCurrentUser(user);
+                    loadFriends(user.id);
+                    setView('chat');
                 } else {
-                    setSelectedFile({
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        file: file
-                    });
+                    setError('Invalid username or password');
                 }
             };
 
-            const handleFileInput = (e) => {
-                if (e.target.files && e.target.files[0]) {
-                    handleFile(e.target.files[0]);
+            const handleAddFriend = (e) => {
+                e.preventDefault();
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const friend = users.find(u => u.username === newFriendUsername);
+
+                if (!friend) {
+                    setError('User not found');
+                    return;
                 }
+
+                if (friend.id === currentUser.id) {
+                    setError('Cannot add yourself');
+                    return;
+                }
+
+                const chatId = `chat_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
+                const newFriend = {
+                    id: friend.id,
+                    username: friend.username,
+                    chatId
+                };
+
+                const updatedFriends = [...friends, newFriend];
+                setFriends(updatedFriends);
+                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
+                setNewFriendUsername('');
+                setError('');
             };
 
-            const handleEmojiSelect = (emoji) => {
-                setNewMessage(prev => prev + emoji.native);
-                setShowEmojiPicker(false);
+            const handleSendMessage = (e) => {
+                e.preventDefault();
+                if (!newMessage.trim() || !activeChat) return;
+
+                const message = {
+                    id: Date.now().toString(),
+                    text: newMessage,
+                    sender: currentUser.username,
+                    senderId: currentUser.id,
+                    timestamp: new Date().toISOString()
+                };
+
+                const updatedMessages = [...messages, message];
+                setMessages(updatedMessages);
+                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
+                setNewMessage('');
             };
 
             const handleDeleteMessage = (messageId) => {
@@ -172,91 +151,10 @@
                 localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
             };
 
-            const handleCreateGroup = () => {
-                if (!groupName.trim() || groupMembers.length < 2) {
-                    setError('Please enter group name and select at least 2 members');
-                    return;
-                }
-
-                const groupId = `group_${Date.now()}`;
-                const newGroup = {
-                    id: groupId,
-                    name: groupName,
-                    members: [...groupMembers, currentUser.id],
-                    isGroup: true,
-                    chatId: `chat_${groupId}`
-                };
-
-                const updatedFriends = [...friends, newGroup];
-                setFriends(updatedFriends);
-                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
-                localStorage.setItem(`chat_${newGroup.chatId}`, '[]');
-                
-                setGroupName('');
-                setGroupMembers([]);
-                setIsGroup(false);
-            };
-
-            const ChatMessage = ({ message, isOwn }) => (
-                <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`message-bubble max-w-[70%] p-3 rounded-lg ${
-                        isOwn ? 'bg-red-500 text-white' : 'bg-white shadow'
-                    }`}>
-                        <div className="flex items-center justify-between mb-1">
-                            <p className="font-bold text-sm">@{message.sender}</p>
-                            {isOwn && (
-                                <button 
-                                    onClick={() => handleDeleteMessage(message.id)}
-                                    className="ml-2 opacity-50 hover:opacity-100"
-                                >
-                                    🗑️
-                                </button>
-                            )}
-                        </div>
-                        
-                        {message.text && <p>{message.text}</p>}
-                        
-                        {message.file && (
-                            message.file.type.startsWith('image/') ? (
-                                <img 
-                                    src={message.file.preview} 
-                                    alt="Shared image" 
-                                    className="preview-image mt-2 rounded"
-                                />
-                            ) : (
-                                <div className="mt-2 p-2 bg-gray-100 rounded flex items-center">
-                                    📎 {message.file.name}
-                                </div>
-                            )
-                        )}
-                        
-                        <p className="text-xs opacity-75 mt-1">
-                            {new Date(message.timestamp).toLocaleTimeString()}
-                        </p>
-                    </div>
-                </div>
-            );
-
-            // ... (previous handleLogin, handleSignup functions remain the same)
-
-            const handleSendMessage = (e) => {
-                e.preventDefault();
-                if ((!newMessage.trim() && !selectedFile) || !activeChat) return;
-
-                const message = {
-                    id: Date.now().toString(),
-                    text: newMessage.trim(),
-                    sender: currentUser.username,
-                    senderId: currentUser.id,
-                    timestamp: new Date().toISOString(),
-                    file: selectedFile
-                };
-
-                const updatedMessages = [...messages, message];
-                setMessages(updatedMessages);
-                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
-                setNewMessage('');
-                setSelectedFile(null);
+            const handleLogout = () => {
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
+                setView('welcome');
             };
 
             if (view === 'chat') {
@@ -264,96 +162,30 @@
                     <div className="h-screen flex">
                         {/* Sidebar */}
                         <div className="w-64 bg-white border-r flex flex-col">
-                            <div className="p-4 toro-gradient text-white">
-                                <div className="flex items-center space-x-3">
-                                    {profileImage ? (
-                                        <img 
-                                            src={profileImage} 
-                                            alt="Profile" 
-                                            className="w-10 h-10 rounded-full"
-                                        />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                                            👤
-                                        </div>
-                                    )}
-                                    <div>
-                                        <h1 className="font-bold text-xl">Toro Chat</h1>
-                                        <p className="text-sm">@{currentUser?.username}</p>
-                                    </div>
-                                </div>
+                            <div className="p-4 gradient text-white">
+                                <h1 className="font-bold text-xl mb-1">Toro Chat</h1>
+                                <p className="text-sm">@{currentUser?.username}</p>
                             </div>
 
-                            {/* Add Friend/Group Section */}
                             <div className="p-4 border-b">
-                                <div className="flex space-x-2 mb-4">
+                                <form onSubmit={handleAddFriend}>
+                                    <input
+                                        type="text"
+                                        value={newFriendUsername}
+                                        onChange={(e) => setNewFriendUsername(e.target.value)}
+                                        placeholder="Add friend by username"
+                                        className="w-full p-2 border rounded mb-2"
+                                    />
                                     <button
-                                        onClick={() => setIsGroup(false)}
-                                        className={`flex-1 p-2 rounded ${!isGroup ? 'bg-red-500 text-white' : 'border'}`}
+                                        type="submit"
+                                        className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
                                     >
                                         Add Friend
                                     </button>
-                                    <button
-                                        onClick={() => setIsGroup(true)}
-                                        className={`flex-1 p-2 rounded ${isGroup ? 'bg-red-500 text-white' : 'border'}`}
-                                    >
-                                        New Group
-                                    </button>
-                                </div>
-
-                                {isGroup ? (
-                                    <form onSubmit={handleCreateGroup}>
-                                        <input
-                                            type="text"
-                                            value={groupName}
-                                            onChange={(e) => setGroupName(e.target.value)}
-                                            placeholder="Group name"
-                                            className="w-full p-2 border rounded mb-2"
-                                        />
-                                        <select
-                                            multiple
-                                            value={groupMembers}
-                                            onChange={(e) => setGroupMembers(Array.from(e.target.selectedOptions, option => option.value))}
-                                            className="w-full p-2 border rounded mb-2"
-                                        >
-                                            {friends
-                                                .filter(f => !f.isGroup)
-                                                .map(friend => (
-                                                    <option key={friend.id} value={friend.id}>
-                                                        @{friend.username}
-                                                    </option>
-                                                ))
-                                            }
-                                        </select>
-                                        <button
-                                            type="submit"
-                                            className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
-                                        >
-                                            Create Group
-                                        </button>
-                                    </form>
-                                ) : (
-                                    <form onSubmit={handleAddFriend}>
-                                        <input
-                                            type="text"
-                                            value={newFriendUsername}
-                                            onChange={(e) => setNewFriendUsername(e.target.value)}
-                                            placeholder="Add friend by username"
-                                            className="w-full p-2 border rounded mb-2"
-                                        />
-                                        <button
-                                            type="submit"
-                                            className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
-                                        >
-                                            Add Friend
-                                        </button>
-                                    </form>
-                                )}
-                                
+                                </form>
                                 {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
                             </div>
 
-                            {/* Friends List */}
                             <div className="flex-1 overflow-y-auto p-4">
                                 {friends.map(friend => (
                                     <button
@@ -366,28 +198,16 @@
                                             friend.chatId === activeChat ? 'bg-red-50' : ''
                                         }`}
                                     >
-                                        {friend.isGroup ? (
-                                            <div className="flex items-center">
-                                                <span className="mr-2">👥</span>
-                                                {friend.name}
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center">
-                                                <span className="mr-2">👤</span>
-                                                @{friend.username}
-                                            </div>
-                                        )}
+                                        @{friend.username}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Logout */}
                             <div className="p-4 border-t">
                                 <button
                                     onClick={handleLogout}
-                                    className="w-full text-red-500 hover:text-red-600 flex items-center justify-center"
+                                    className="w-full text-red-500 hover:text-red-600"
                                 >
-                                    <span className="mr-2">🚪</span>
                                     Logout
                                 </button>
                             </div>
@@ -397,121 +217,57 @@
                         <div className="flex-1 flex flex-col bg-gray-50">
                             {activeChat ? (
                                 <>
-                                    {/* Messages */}
-                                    <div 
-                                        ref={chatContainerRef}
-                                        className="flex-1 overflow-y-auto p-4 space-y-4"
-                                        onDragEnter={handleDrag}
-                                    >
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                         {messages.map(message => (
-                                            <ChatMessage 
+                                            <div
                                                 key={message.id}
-                                                message={message}
-                                                isOwn={message.senderId === currentUser.id}
-                                            />
+                                                className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
+                                            >
+                                                <div className={`max-w-[70%] p-3 rounded-lg ${
+                                                    message.senderId === currentUser.id ? 'bg-red-500 text-white' : 'bg-white shadow'
+                                                }`}>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <p className="font-bold text-sm">@{message.sender}</p>
+                                                        {message.senderId === currentUser.id && (
+                                                            <button
+                                                                onClick={() => handleDeleteMessage(message.id)}
+                                                                className="ml-2 text-sm opacity-75 hover:opacity-100"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <p>{message.text}</p>
+                                                    <p className="text-xs opacity-75 mt-1">
+                                                        {new Date(message.timestamp).toLocaleTimeString()}
+                                                    </p>
+                                                </div>
+                                            </div>
                                         ))}
                                         <div ref={messagesEndRef} />
                                     </div>
 
-                                    {/* File Drop Zone */}
-                                    {dragActive && (
-                                        <div 
-                                            className="absolute inset-0 bg-gray-900/50 flex items-center justify-center"
-                                            onDragEnter={handleDrag}
-                                            onDragLeave={handleDrag}
-                                            onDragOver={handleDrag}
-                                            onDrop={handleDrop}
-                                        >
-                                            <div className="bg-white p-8 rounded-lg text-center">
-                                                <p className="text-xl">Drop your file here</p>
-                                                <p className="text-gray-500">Images and documents are supported</p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* File Preview */}
-                                    {selectedFile && (
-                                        <div className="p-4 bg-gray-100 border-t">
-                                            <div className="flex items-center justify-between">
-                                                {selectedFile.preview ? (
-                                                    <img 
-                                                        src={selectedFile.preview} 
-                                                        alt="Preview" 
-                                                        className="h-20 rounded"
-                                                    />
-                                                ) : (
-                                                    <div className="flex items-center">
-                                                        <span className="mr-2">📎</span>
-                                                        {selectedFile.name}
-                                                    </div>
-                                                )}
-                                                <button 
-                                                    onClick={() => setSelectedFile(null)}
-                                                    className="text-red-500 hover:text-red-600"
-                                                >
-                                                    ❌
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Message Input */}
                                     <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
                                         <div className="flex space-x-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => fileInputRef.current.click()}
-                                                className="p-2 text-gray-500 hover:text-red-500"
-                                            >
-                                                📎
-                                            </button>
                                             <input
-                                                type="file"
-                                                ref={fileInputRef}
-                                                onChange={handleFileInput}
-                                                className="hidden"
+                                                type="text"
+                                                value={newMessage}
+                                                onChange={(e) => setNewMessage(e.target.value)}
+                                                placeholder="Type a message..."
+                                                className="flex-1 p-2 border rounded-full"
                                             />
-                                            
-                                            <div className="relative flex-1">
-                                                <input
-                                                    type="text"
-                                                    value={newMessage}
-                                                    onChange={(e) => setNewMessage(e.target.value)}
-                                                    placeholder="Type a message..."
-                                                    className="w-full p-2 pr-10 border rounded-full"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-red-500"
-                                                >
-                                                    😊
-                                                </button>
-                                                {showEmojiPicker && (
-                                                    <div className="emoji-picker absolute bottom-full right-0 mb-2">
-                                                        <emoji-picker
-                                                            onEmojiSelect={handleEmojiSelect}
-                                                        ></emoji-picker>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
                                             <button
                                                 type="submit"
-                                                className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 flex items-center"
+                                                className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600"
                                             >
-                                                <span className="mr-1">Send</span>
-                                                ➤
+                                                Send
                                             </button>
                                         </div>
                                     </form>
                                 </>
                             ) : (
                                 <div className="flex-1 flex items-center justify-center text-gray-500">
-                                    <div className="text-center">
-                                        <p className="text-6xl mb-4">👋</p>
-                                        <p>Select a friend or group to start chatting</p>
-                                    </div>
+                                    Select a friend to start chatting
                                 </div>
                             )}
                         </div>
@@ -519,36 +275,30 @@
                 );
             }
 
-            // Welcome Screen
             return (
-                <div className="min-h-screen toro-gradient flex items-center justify-center p-4">
+                <div className="min-h-screen gradient flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
                         <div className="text-center mb-8">
-                            <div className="text-6xl mb-4">🐂</div>
                             <h1 className="text-4xl font-bold text-red-500 mb-2">TORO CHAT</h1>
-                            <p className="text-gray-500">Connect with friends instantly</p>
+                            <p className="text-gray-500">Simple messaging app</p>
                         </div>
 
-                        {view === 'welcome' && (
+                        {view === 'welcome' ? (
                             <div className="space-y-4">
                                 <button 
                                     onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 flex items-center justify-center"
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
                                 >
-                                    <span className="mr-2">✨</span>
                                     Sign Up
                                 </button>
                                 <button 
                                     onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white flex items-center justify-center"
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white"
                                 >
-                                    <span className="mr-2">🔑</span>
                                     Login
                                 </button>
                             </div>
-                        )}
-
-                        {(view === 'login' || view === 'signup') && (
+                        ) : (
                             <form onSubmit={view === 'login' ? handleLogin : handleSignup}>
                                 <div className="space-y-4">
                                     <div>
@@ -583,7 +333,7 @@
                                         onClick={() => setView('welcome')}
                                         className="w-full text-gray-500 hover:text-gray-700"
                                     >
-                                        Back to Welcome
+                                        Back
                                     </button>
                                 </div>
                             </form>
@@ -593,7 +343,8 @@
             );
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
