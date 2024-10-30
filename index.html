@@ -23,328 +23,348 @@
             const [password, setPassword] = React.useState('');
             const [currentUser, setCurrentUser] = React.useState(null);
             const [friends, setFriends] = React.useState([]);
+            const [allUsers, setAllUsers] = React.useState([]);
             const [newFriendUsername, setNewFriendUsername] = React.useState('');
             const [activeChat, setActiveChat] = React.useState(null);
             const [messages, setMessages] = React.useState([]);
             const [newMessage, setNewMessage] = React.useState('');
             const [error, setError] = React.useState('');
-
             const messagesEndRef = React.useRef(null);
 
-            React.useEffect(() => {
-                const savedUser = localStorage.getItem('currentUser');
-                if (savedUser) {
-                    const user = JSON.parse(savedUser);
-                    setCurrentUser(user);
-                    loadFriends(user.id);
-                    setView('chat');
-                }
-            }, []);
-
-            React.useEffect(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, [messages]);
-
-            const loadFriends = (userId) => {
-                const savedFriends = localStorage.getItem(`friends_${userId}`);
-                if (savedFriends) {
-                    setFriends(JSON.parse(savedFriends));
-                }
-            };
-
-            const loadMessages = (chatId) => {
-                const savedMessages = localStorage.getItem(`chat_${chatId}`);
-                if (savedMessages) {
-                    setMessages(JSON.parse(savedMessages));
-                } else {
-                    setMessages([]);
-                }
-            };
-
-            const handleSignup = (e) => {
-                e.preventDefault();
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                
-                if (users.some(u => u.username === username)) {
-                    setError('Username already taken');
-                    return;
-                }
-
-                const newUser = {
-                    id: Date.now().toString(),
-                    username,
-                    password
-                };
-
-                users.push(newUser);
-                localStorage.setItem('users', JSON.stringify(users));
-                localStorage.setItem('currentUser', JSON.stringify(newUser));
-                setCurrentUser(newUser);
+        React.useEffect(() => {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                setCurrentUser(user);
+                loadFriends(user.id);
+                loadAllUsers();
                 setView('chat');
-            };
+            }
+        }, []);
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const user = users.find(u => u.username === username && u.password === password);
-                
-                if (user) {
-                    localStorage.setItem('currentUser', JSON.stringify(user));
-                    setCurrentUser(user);
-                    loadFriends(user.id);
-                    setView('chat');
-                } else {
-                    setError('Invalid username or password');
-                }
-            };
+        React.useEffect(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, [messages]);
 
-            const handleAddFriend = (e) => {
-                e.preventDefault();
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const friend = users.find(u => u.username === newFriendUsername);
+        const loadFriends = (userId) => {
+            const savedFriends = localStorage.getItem(`friends_${userId}`);
+            if (savedFriends) {
+                setFriends(JSON.parse(savedFriends));
+            }
+        };
 
-                if (!friend) {
-                    setError('User not found');
-                    return;
-                }
+        const loadAllUsers = () => {
+            const savedUsers = localStorage.getItem('users');
+            if (savedUsers) {
+                setAllUsers(JSON.parse(savedUsers));
+            }
+        };
 
-                if (friend.id === currentUser.id) {
-                    setError('Cannot add yourself');
-                    return;
-                }
+        const loadMessages = (chatId) => {
+            const savedMessages = localStorage.getItem(`chat_${chatId}`);
+            if (savedMessages) {
+                setMessages(JSON.parse(savedMessages));
+            } else {
+                setMessages([]);
+            }
+        };
 
-                const chatId = `chat_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
-                const newFriend = {
-                    id: friend.id,
-                    username: friend.username,
-                    chatId
-                };
+        const handleSignup = (e) => {
+            e.preventDefault();
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
 
-                const updatedFriends = [...friends, newFriend];
-                setFriends(updatedFriends);
-                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
-                setNewFriendUsername('');
-                setError('');
-            };
-
-            const handleSendMessage = (e) => {
-                e.preventDefault();
-                if (!newMessage.trim() || !activeChat) return;
-
-                const message = {
-                    id: Date.now().toString(),
-                    text: newMessage,
-                    sender: currentUser.username,
-                    senderId: currentUser.id,
-                    timestamp: new Date().toISOString()
-                };
-
-                const updatedMessages = [...messages, message];
-                setMessages(updatedMessages);
-                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
-                setNewMessage('');
-            };
-
-            const handleDeleteMessage = (messageId) => {
-                const updatedMessages = messages.filter(msg => msg.id !== messageId);
-                setMessages(updatedMessages);
-                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
-            };
-
-            const handleLogout = () => {
-                localStorage.removeItem('currentUser');
-                setCurrentUser(null);
-                setView('welcome');
-            };
-
-            if (view === 'chat') {
-                return (
-                    <div className="h-screen flex">
-                        {/* Sidebar */}
-                        <div className="w-64 bg-white border-r flex flex-col">
-                            <div className="p-4 gradient text-white">
-                                <h1 className="font-bold text-xl mb-1">Toro Chat</h1>
-                                <p className="text-sm">@{currentUser?.username}</p>
-                            </div>
-
-                            <div className="p-4 border-b">
-                                <form onSubmit={handleAddFriend}>
-                                    <input
-                                        type="text"
-                                        value={newFriendUsername}
-                                        onChange={(e) => setNewFriendUsername(e.target.value)}
-                                        placeholder="Add friend by username"
-                                        className="w-full p-2 border rounded mb-2"
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
-                                    >
-                                        Add Friend
-                                    </button>
-                                </form>
-                                {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-4">
-                                {friends.map(friend => (
-                                    <button
-                                        key={friend.id}
-                                        onClick={() => {
-                                            setActiveChat(friend.chatId);
-                                            loadMessages(friend.chatId);
-                                        }}
-                                        className={`w-full p-3 rounded mb-2 text-left hover:bg-gray-50 ${
-                                            friend.chatId === activeChat ? 'bg-red-50' : ''
-                                        }`}
-                                    >
-                                        @{friend.username}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="p-4 border-t">
-                                <button
-                                    onClick={handleLogout}
-                                    className="w-full text-red-500 hover:text-red-600"
-                                >
-                                    Logout
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Chat Area */}
-                        <div className="flex-1 flex flex-col bg-gray-50">
-                            {activeChat ? (
-                                <>
-                                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                        {messages.map(message => (
-                                            <div
-                                                key={message.id}
-                                                className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
-                                            >
-                                                <div className={`max-w-[70%] p-3 rounded-lg ${
-                                                    message.senderId === currentUser.id ? 'bg-red-500 text-white' : 'bg-white shadow'
-                                                }`}>
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <p className="font-bold text-sm">@{message.sender}</p>
-                                                        {message.senderId === currentUser.id && (
-                                                            <button
-                                                                onClick={() => handleDeleteMessage(message.id)}
-                                                                className="ml-2 text-sm opacity-75 hover:opacity-100"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <p>{message.text}</p>
-                                                    <p className="text-xs opacity-75 mt-1">
-                                                        {new Date(message.timestamp).toLocaleTimeString()}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        <div ref={messagesEndRef} />
-                                    </div>
-
-                                    <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                                        <div className="flex space-x-2">
-                                            <input
-                                                type="text"
-                                                value={newMessage}
-                                                onChange={(e) => setNewMessage(e.target.value)}
-                                                placeholder="Type a message..."
-                                                className="flex-1 p-2 border rounded-full"
-                                            />
-                                            <button
-                                                type="submit"
-                                                className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600"
-                                            >
-                                                Send
-                                            </button>
-                                        </div>
-                                    </form>
-                                </>
-                            ) : (
-                                <div className="flex-1 flex items-center justify-center text-gray-500">
-                                    Select a friend to start chatting
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
+            if (users.some(u => u.username === username)) {
+                setError('Username already taken');
+                return;
             }
 
+            const newUser = {
+                id: Date.now().toString(),
+                username,
+                password
+            };
+
+            users.push(newUser);
+            localStorage.setItem('users', JSON.stringify(users));
+            localStorage.setItem('currentUser', JSON.stringify(newUser));
+            setCurrentUser(newUser);
+            setView('chat');
+        };
+
+        const handleLogin = (e) => {
+            e.preventDefault();
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const user = users.find(u => u.username === username && u.password === password);
+
+            if (user) {
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                setCurrentUser(user);
+                loadFriends(user.id);
+                loadAllUsers();
+                setView('chat');
+            } else {
+                setError('Invalid username or password');
+            }
+        };
+
+        const handleAddFriend = (e) => {
+            e.preventDefault();
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const friend = users.find(u => u.username === newFriendUsername);
+
+            if (!friend) {
+                setError('User not found');
+                return;
+            }
+
+            if (friend.id === currentUser.id) {
+                setError('Cannot add yourself');
+                return;
+            }
+
+            const chatId = `chat_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
+            const newFriend = {
+                id: friend.id,
+                username: friend.username,
+                chatId
+            };
+
+            const updatedFriends = [...friends, newFriend];
+            setFriends(updatedFriends);
+            localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
+            setNewFriendUsername('');
+            setError('');
+        };
+
+        const handleSendMessage = (e) => {
+            e.preventDefault();
+            if (!newMessage.trim() || !activeChat) return;
+
+            const message = {
+                id: Date.now().toString(),
+                text: newMessage,
+                sender: currentUser.username,
+                senderId: currentUser.id,
+                timestamp: new Date().toISOString()
+            };
+
+            const updatedMessages = [...messages, message];
+            setMessages(updatedMessages);
+            localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
+            setNewMessage('');
+        };
+
+        const handleDeleteMessage = (messageId) => {
+            const updatedMessages = messages.filter(msg => msg.id !== messageId);
+            setMessages(updatedMessages);
+            localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
+        };
+
+        const handleLogout = () => {
+            localStorage.removeItem('currentUser');
+            setCurrentUser(null);
+            setView('welcome');
+        };
+
+        if (view === 'chat') {
             return (
-                <div className="min-h-screen gradient flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                        <div className="text-center mb-8">
-                            <h1 className="text-4xl font-bold text-red-500 mb-2">TORO CHAT</h1>
-                            <p className="text-gray-500">Simple messaging app</p>
+                <div className="h-screen flex">
+                    {/* Sidebar */}
+                    <div className="w-64 bg-white border-r flex flex-col">
+                        <div className="p-4 gradient text-white">
+                            <h1 className="font-bold text-xl mb-1">Toro Chat</h1>
+                            <p className="text-sm">@{currentUser?.username}</p>
                         </div>
 
-                        {view === 'welcome' ? (
-                            <div className="space-y-4">
-                                <button 
-                                    onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                        <div className="p-4 border-b">
+                            <form onSubmit={handleAddFriend}>
+                                <input
+                                    type="text"
+                                    value={newFriendUsername}
+                                    onChange={(e) => setNewFriendUsername(e.target.value)}
+                                    placeholder="Add friend by username"
+                                    className="w-full p-2 border rounded mb-2"
+                                />
+                                <button
+                                    type="submit"
+                                    className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
                                 >
-                                    Sign Up
+                                    Add Friend
                                 </button>
-                                <button 
-                                    onClick={() => setView('login')}
-                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white"
+                            </form>
+                            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {friends.map(friend => (
+                                <button
+                                    key={friend.id}
+                                    onClick={() => {
+                                        setActiveChat(friend.chatId);
+                                        loadMessages(friend.chatId);
+                                    }}
+                                    className={`w-full p-3 rounded mb-2 text-left hover:bg-gray-50 ${
+                                        friend.chatId === activeChat ? 'bg-red-50' : ''
+                                    }`}
                                 >
-                                    Login
+                                    @{friend.username}
                                 </button>
+                            ))}
+                            <div className="p-3 rounded mb-2 text-left hover:bg-gray-50 cursor-pointer" onClick={() => setView('users')}>
+                                View All Users
                             </div>
-                        ) : (
-                            <form onSubmit={view === 'login' ? handleLogin : handleSignup}>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-gray-700 mb-2">Username</label>
+                        </div>
+
+                        <div className="p-4 border-t">
+                            <button
+                                onClick={handleLogout}
+                                className="w-full text-red-500 hover:text-red-600"
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Chat Area */}
+                    <div className="flex-1 flex flex-col bg-gray-50">
+                        {activeChat ? (
+                            <>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {messages.map(message => (
+                                        <div
+                                            key={message.id}
+                                            className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                            <div className={`max-w-[70%] p-3 rounded-lg ${
+                                                message.senderId === currentUser.id ? 'bg-red-500 text-white' : 'bg-white shadow'
+                                            }`}>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <p className="font-bold text-sm">@{message.sender}</p>
+                                                    {message.senderId === currentUser.id && (
+                                                        <button
+                                                            onClick={() => handleDeleteMessage(message.id)}
+                                                            className="ml-2 text-sm opacity-75 hover:opacity-100"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <p>{message.text}</p>
+                                                <p className="text-xs opacity-75 mt-1">
+                                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div ref={messagesEndRef} />
+                                </div>
+
+                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
+                                    <div className="flex space-x-2">
                                         <input
                                             type="text"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
-                                            className="w-full p-3 border rounded-lg"
-                                            placeholder="Enter your username"
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            placeholder="Type a message..."
+                                            className="flex-1 p-2 border rounded-full"
                                         />
+                                        <button
+                                            type="submit"
+                                            className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600"
+                                        >
+                                            Send
+                                        </button>
                                     </div>
-                                    <div>
-                                        <label className="block text-gray-700 mb-2">Password</label>
-                                        <input
-                                            type="password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="w-full p-3 border rounded-lg"
-                                            placeholder="Enter your password"
-                                        />
+                                </form>
+                            </>
+                        ) : view === 'users' ? (
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {allUsers.map(user => (
+                                    <div key={user.id} className="bg-white rounded-lg shadow p-4 hover:bg-gray-50">
+                                        <p className="font-bold text-lg">@{user.username}</p>
                                     </div>
-                                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
-                                    >
-                                        {view === 'login' ? 'Login' : 'Sign Up'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setView('welcome')}
-                                        className="w-full text-gray-500 hover:text-gray-700"
-                                    >
-                                        Back
-                                    </button>
-                                </div>
-                            </form>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-gray-500">
+                                Select a friend to start chatting
+                            </div>
                         )}
                     </div>
                 </div>
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+        return (
+            <div className="min-h-screen gradient flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl font-bold text-red-500 mb-2">TORO CHAT</h1>
+                        <p className="text-gray-500">Simple messaging app</p>
+                    </div>
+
+                    {view === 'welcome' ? (
+                        <div className="space-y-4">
+                            <button 
+                                onClick={() => setView('signup')}
+                                className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                            >
+                                Sign Up
+                            </button>
+                            <button 
+                                onClick={() => setView('login')}
+                                className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white"
+                            >
+                                Login
+                            </button>
+                        </div>
+                    ) : (
+                        <form onSubmit={view === 'login' ? handleLogin : handleSignup}>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Username</label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full p-3 border rounded-lg"
+                                        placeholder="Enter your username"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 mb-2">Password</label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full p-3 border rounded-lg"
+                                        placeholder="Enter your password"
+                                    />
+                                </div>
+                                {error && <p className="text-red-500 text-sm">{error}</p>}
+                                <button
+                                    type="submit"
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                                >
+                                    {view === 'login' ? 'Login' : 'Sign Up'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setView('welcome')}
+                                    className="w-full text-gray-500 hover:text-gray-700"
+                                >
+                                    Back
+                                </button>
+                            </div>
+                        </form>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+</script>
 </body>
 </html>
