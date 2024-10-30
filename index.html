@@ -166,6 +166,10 @@
             setView('welcome');
         };
 
+        const handleViewAllUsers = () => {
+            setView('users');
+        };
+
         if (view === 'chat') {
             return (
                 <div className="h-screen flex">
@@ -210,7 +214,7 @@
                                     @{friend.username}
                                 </button>
                             ))}
-                            <div className="p-3 rounded mb-2 text-left hover:bg-gray-50 cursor-pointer" onClick={() => setView('users')}>
+                            <div className="p-3 rounded mb-2 text-left hover:bg-gray-50 cursor-pointer" onClick={handleViewAllUsers}>
                                 View All Users
                             </div>
                         </div>
@@ -284,6 +288,12 @@
                                         <p className="font-bold text-lg">@{user.username}</p>
                                     </div>
                                 ))}
+                                <button
+                                    onClick={() => setView('chat')}
+                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
+                                >
+                                    Back to Chat
+                                </button>
                             </div>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-gray-500">
