@@ -25,37 +25,38 @@
     <div id="root"></div>
     <script type="text/babel">
         function App() {
-            const [view, setView] = React.useState('welcome');
-            const [username, setUsername] = React.useState('');
-            const [password, setPassword] = React.useState('');
+            // State management
+            const [users, setUsers] = React.useState([]);
             const [currentUser, setCurrentUser] = React.useState(null);
             const [friends, setFriends] = React.useState([]);
-            const [allUsers, setAllUsers] = React.useState([]);
-            const [activeChat, setActiveChat] = React.useState(null);
             const [messages, setMessages] = React.useState([]);
             const [newMessage, setNewMessage] = React.useState('');
+            const [username, setUsername] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [view, setView] = React.useState('welcome');
+            const [chatView, setChatView] = React.useState('messages');
+            const [activeChat, setActiveChat] = React.useState(null);
             const [error, setError] = React.useState('');
             const [searchTerm, setSearchTerm] = React.useState('');
-            const [chatView, setChatView] = React.useState('messages');
             const messagesEndRef = React.useRef(null);
 
+            // Load initial data
             React.useEffect(() => {
+                // Load users from localStorage
+                const storedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+                setUsers(storedUsers);
+
+                // Check for logged in user
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
                     const user = JSON.parse(savedUser);
                     setCurrentUser(user);
                     loadFriends(user.id);
-                    loadAllUsers();
                     setView('chat');
                 }
             }, []);
 
-            React.useEffect(() => {
-                if (chatView === 'users') {
-                    loadAllUsers();
-                }
-            }, [chatView]);
-
+            // Auto-scroll messages
             React.useEffect(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
@@ -65,12 +66,6 @@
                 if (savedFriends) {
                     setFriends(JSON.parse(savedFriends));
                 }
-            };
-
-            const loadAllUsers = () => {
-                const savedUsers = localStorage.getItem('users') || '[]';
-                const users = JSON.parse(savedUsers);
-                setAllUsers(users);
             };
 
             const loadMessages = (chatId) => {
@@ -89,8 +84,6 @@
                     return;
                 }
 
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                
                 if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
                     setError('Username already taken');
                     return;
@@ -98,43 +91,43 @@
 
                 const newUser = {
                     id: Date.now().toString(),
-                    username,
-                    password,
+                    username: username.trim(),
+                    password: password.trim(),
                     createdAt: new Date().toISOString()
                 };
 
-                users.push(newUser);
-                localStorage.setItem('users', JSON.stringify(users));
+                const updatedUsers = [...users, newUser];
+                localStorage.setItem('users', JSON.stringify(updatedUsers));
                 localStorage.setItem('currentUser', JSON.stringify(newUser));
                 localStorage.setItem(`friends_${newUser.id}`, '[]');
+                
+                setUsers(updatedUsers);
                 setCurrentUser(newUser);
-                setAllUsers(users);
+                setFriends([]);
                 setView('chat');
+                setError('');
             };
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (!username.trim() || !password.trim()) {
-                    setError('Username and password are required');
-                    return;
-                }
+                const user = users.find(u => 
+                    u.username.toLowerCase() === username.toLowerCase() && 
+                    u.password === password
+                );
 
-                const users = JSON.parse(localStorage.getItem('users') || '[]');
-                const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
-                
                 if (user) {
                     localStorage.setItem('currentUser', JSON.stringify(user));
                     setCurrentUser(user);
                     loadFriends(user.id);
-                    loadAllUsers();
                     setView('chat');
+                    setError('');
                 } else {
                     setError('Invalid username or password');
                 }
             };
 
             const handleAddFriend = (friendId) => {
-                const friend = allUsers.find(u => u.id === friendId);
+                const friend = users.find(u => u.id === friendId);
                 if (!friend) return;
 
                 if (friend.id === currentUser.id) {
@@ -158,7 +151,6 @@
                 setFriends(updatedFriends);
                 localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
                 setChatView('messages');
-                setError('');
             };
 
             const handleSendMessage = (e) => {
@@ -195,70 +187,10 @@
                 setError('');
             };
 
-            const UsersList = () => {
-                const filteredUsers = allUsers.filter(user => 
-                    user.id !== currentUser?.id &&
-                    user.username.toLowerCase().includes(searchTerm.toLowerCase())
-                );
-
-                return (
-                    <div className="flex-1 overflow-y-auto p-6">
-                        <div className="max-w-3xl mx-auto">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold">Add New Friends</h2>
-                                <div className="text-sm text-gray-500">
-                                    {filteredUsers.length} users found
-                                </div>
-                            </div>
-
-                            <div className="mb-6">
-                                <input
-                                    type="text"
-                                    placeholder="Search users..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full p-3 border rounded-lg"
-                                />
-                            </div>
-
-                            {filteredUsers.length > 0 ? (
-                                <div className="space-y-4">
-                                    {filteredUsers.map(user => (
-                                        <div key={user.id} className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                                    <span className="text-red-500 text-lg">
-                                                        {user.username[0].toUpperCase()}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-lg">@{user.username}</p>
-                                                    <p className="text-sm text-gray-500">
-                                                        Joined {new Date(user.createdAt).toLocaleDateString()}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {!friends.some(f => f.id === user.id) && (
-                                                <button
-                                                    onClick={() => handleAddFriend(user.id)}
-                                                    className="bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 transition-colors"
-                                                >
-                                                    Add Friend
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <div className="text-4xl mb-4">🔍</div>
-                                    <p className="text-gray-500">No users found</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            };
+            const filteredUsers = users.filter(user => 
+                user.id !== currentUser?.id &&
+                user.username.toLowerCase().includes(searchTerm.toLowerCase())
+            );
 
             if (view === 'chat') {
                 return (
@@ -327,7 +259,54 @@
                         {/* Main Content */}
                         <div className="flex-1 flex flex-col bg-gray-50">
                             {chatView === 'users' ? (
-                                <UsersList />
+                                <div className="flex-1 overflow-y-auto p-6">
+                                    <div className="max-w-3xl mx-auto">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-2xl font-bold">Add New Friends</h2>
+                                            <p className="text-sm text-gray-500">
+                                                {filteredUsers.length} users found
+                                            </p>
+                                        </div>
+
+                                        <div className="mb-6">
+                                            <input
+                                                type="text"
+                                                placeholder="Search users..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="w-full p-3 border rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {filteredUsers.map(user => (
+                                                <div key={user.id} className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                                            <span className="text-red-500 text-lg">
+                                                                {user.username[0].toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-lg">@{user.username}</p>
+                                                            <p className="text-sm text-gray-500">
+                                                                Joined {new Date(user.createdAt).toLocaleDateString()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {!friends.some(f => f.id === user.id) && (
+                                                        <button
+                                                            onClick={() => handleAddFriend(user.id)}
+                                                            className="bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 transition-colors"
+                                                        >
+                                                            Add Friend
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             ) : activeChat ? (
                                 <>
                                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -350,7 +329,7 @@
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <p className="whitespace-pre-wrap break-words">{message.text}</p>
+                                                    <p>{message.text}</p>
                                                     <p className="text-xs opacity-75 mt-1">
                                                         {new Date(message.timestamp).toLocaleTimeString()}
                                                     </p>
@@ -367,19 +346,19 @@
                                                 value={newMessage}
                                                 onChange={(e) => setNewMessage(e.target.value)}
                                                 placeholder="Type a message..."
-                                                className="flex-1 p-3 border rounded-full focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                                className="flex-1 p-3 border rounded-full"
                                             />
                                             <button
                                                 type="submit"
                                                 disabled={!newMessage.trim()}
-                                                className="bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
+                                                className="bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                                             >
                                                 <span>Send</span>
                                                 <i className="fas fa-paper-plane"></i>
                                             </button>
                                         </div>
                                     </form>
-                                </>
+                                    </>
                             ) : (
                                 <div className="flex-1 flex items-center justify-center">
                                     <div className="text-center">
