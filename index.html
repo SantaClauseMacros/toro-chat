@@ -8,9 +8,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .gradient {
             background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
+        }
+        .message-bubble {
+            transition: all 0.3s ease;
+        }
+        .message-bubble:hover {
+            transform: translateY(-2px);
+        }
+        .online-indicator {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
         }
     </style>
 </head>
@@ -29,316 +42,435 @@
             const [messages, setMessages] = React.useState([]);
             const [newMessage, setNewMessage] = React.useState('');
             const [error, setError] = React.useState('');
+            const [searchTerm, setSearchTerm] = React.useState('');
             const messagesEndRef = React.useRef(null);
 
-        React.useEffect(() => {
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                const user = JSON.parse(savedUser);
-                setCurrentUser(user);
-                loadFriends(user.id);
-                loadAllUsers();
+            // Load initial data
+            React.useEffect(() => {
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    const user = JSON.parse(savedUser);
+                    setCurrentUser(user);
+                    loadFriends(user.id);
+                    loadAllUsers();
+                    setView('chat');
+                }
+            }, []);
+
+            // Auto-scroll messages
+            React.useEffect(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [messages]);
+
+            // Simulated real-time updates
+            React.useEffect(() => {
+                if (activeChat) {
+                    const interval = setInterval(() => {
+                        loadMessages(activeChat);
+                    }, 3000);
+                    return () => clearInterval(interval);
+                }
+            }, [activeChat]);
+
+            const loadFriends = (userId) => {
+                const savedFriends = localStorage.getItem(`friends_${userId}`);
+                if (savedFriends) {
+                    setFriends(JSON.parse(savedFriends));
+                }
+            };
+
+            const loadAllUsers = () => {
+                const savedUsers = localStorage.getItem('users');
+                if (savedUsers) {
+                    setAllUsers(JSON.parse(savedUsers));
+                }
+            };
+
+            const loadMessages = (chatId) => {
+                const savedMessages = localStorage.getItem(`chat_${chatId}`);
+                if (savedMessages) {
+                    setMessages(JSON.parse(savedMessages));
+                } else {
+                    setMessages([]);
+                }
+            };
+
+            const handleSignup = (e) => {
+                e.preventDefault();
+                if (!username.trim() || !password.trim()) {
+                    setError('Username and password are required');
+                    return;
+                }
+
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+                if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    setError('Username already taken');
+                    return;
+                }
+
+                const newUser = {
+                    id: Date.now().toString(),
+                    username,
+                    password,
+                    createdAt: new Date().toISOString()
+                };
+
+                users.push(newUser);
+                localStorage.setItem('users', JSON.stringify(users));
+                localStorage.setItem('currentUser', JSON.stringify(newUser));
+                localStorage.setItem(`friends_${newUser.id}`, '[]');
+                setCurrentUser(newUser);
+                setAllUsers(users);
                 setView('chat');
-            }
-        }, []);
+            };
 
-        React.useEffect(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, [messages]);
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (!username.trim() || !password.trim()) {
+                    setError('Username and password are required');
+                    return;
+                }
 
-        const loadFriends = (userId) => {
-            const savedFriends = localStorage.getItem(`friends_${userId}`);
-            if (savedFriends) {
-                setFriends(JSON.parse(savedFriends));
-            }
-        };
+                const users = JSON.parse(localStorage.getItem('users') || '[]');
+                const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
 
-        const loadAllUsers = () => {
-            const savedUsers = localStorage.getItem('users');
-            if (savedUsers) {
-                setAllUsers(JSON.parse(savedUsers));
-            }
-        };
+                if (user) {
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    setCurrentUser(user);
+                    loadFriends(user.id);
+                    loadAllUsers();
+                    setView('chat');
+                    setError('');
+                } else {
+                    setError('Invalid username or password');
+                }
+            };
 
-        const loadMessages = (chatId) => {
-            const savedMessages = localStorage.getItem(`chat_${chatId}`);
-            if (savedMessages) {
-                setMessages(JSON.parse(savedMessages));
-            } else {
+            const handleAddFriend = (friendId) => {
+                const friend = allUsers.find(u => u.id === friendId);
+                if (!friend) return;
+
+                if (friend.id === currentUser.id) {
+                    setError('Cannot add yourself');
+                    return;
+                }
+
+                if (friends.some(f => f.id === friend.id)) {
+                    setError('Already in your friends list');
+                    return;
+                }
+
+                const chatId = `chat_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
+                const newFriend = {
+                    id: friend.id,
+                    username: friend.username,
+                    chatId
+                };
+
+                const updatedFriends = [...friends, newFriend];
+                setFriends(updatedFriends);
+                localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
+                setError('');
+                setView('chat');
+            };
+
+            const handleSendMessage = (e) => {
+                e.preventDefault();
+                if (!newMessage.trim() || !activeChat) return;
+
+                const message = {
+                    id: Date.now().toString(),
+                    text: newMessage.trim(),
+                    sender: currentUser.username,
+                    senderId: currentUser.id,
+                    timestamp: new Date().toISOString()
+                };
+
+                const updatedMessages = [...messages, message];
+                setMessages(updatedMessages);
+                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
+                setNewMessage('');
+            };
+
+            const handleDeleteMessage = (messageId) => {
+                const updatedMessages = messages.filter(msg => msg.id !== messageId);
+                setMessages(updatedMessages);
+                localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
+            };
+
+            const handleLogout = () => {
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
+                setFriends([]);
                 setMessages([]);
-            }
-        };
-
-        const handleSignup = (e) => {
-            e.preventDefault();
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-
-            if (users.some(u => u.username === username)) {
-                setError('Username already taken');
-                return;
-            }
-
-            const newUser = {
-                id: Date.now().toString(),
-                username,
-                password
+                setActiveChat(null);
+                setView('welcome');
             };
 
-            users.push(newUser);
-            localStorage.setItem('users', JSON.stringify(users));
-            localStorage.setItem('currentUser', JSON.stringify(newUser));
-            setCurrentUser(newUser);
-            setView('chat');
-        };
+            const filteredUsers = allUsers.filter(user => 
+                user.id !== currentUser?.id && 
+                user.username.toLowerCase().includes(searchTerm.toLowerCase())
+            );
 
-        const handleLogin = (e) => {
-            e.preventDefault();
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const user = users.find(u => u.username === username && u.password === password);
-
-            if (user) {
-                localStorage.setItem('currentUser', JSON.stringify(user));
-                setCurrentUser(user);
-                loadFriends(user.id);
-                loadAllUsers();
-                setView('chat');
-            } else {
-                setError('Invalid username or password');
-            }
-        };
-
-        const handleAddFriend = (e) => {
-            e.preventDefault();
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const friend = users.find(u => u.username === newFriendUsername);
-
-            if (!friend) {
-                setError('User not found');
-                return;
-            }
-
-            if (friend.id === currentUser.id) {
-                setError('Cannot add yourself');
-                return;
-            }
-
-            const chatId = `chat_${Math.min(currentUser.id, friend.id)}_${Math.max(currentUser.id, friend.id)}`;
-            const newFriend = {
-                id: friend.id,
-                username: friend.username,
-                chatId
-            };
-
-            const updatedFriends = [...friends, newFriend];
-            setFriends(updatedFriends);
-            localStorage.setItem(`friends_${currentUser.id}`, JSON.stringify(updatedFriends));
-            setNewFriendUsername('');
-            setError('');
-        };
-
-        const handleSendMessage = (e) => {
-            e.preventDefault();
-            if (!newMessage.trim() || !activeChat) return;
-
-            const message = {
-                id: Date.now().toString(),
-                text: newMessage,
-                sender: currentUser.username,
-                senderId: currentUser.id,
-                timestamp: new Date().toISOString()
-            };
-
-            const updatedMessages = [...messages, message];
-            setMessages(updatedMessages);
-            localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
-            setNewMessage('');
-        };
-
-        const handleDeleteMessage = (messageId) => {
-            const updatedMessages = messages.filter(msg => msg.id !== messageId);
-            setMessages(updatedMessages);
-            localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
-        };
-
-        const handleLogout = () => {
-            localStorage.removeItem('currentUser');
-            setCurrentUser(null);
-            setView('welcome');
-        };
-
-        const handleViewAllUsers = () => {
-            setView('users');
-        };
-
-        if (view === 'chat') {
-            return (
-                <div className="h-screen flex">
-                    {/* Sidebar */}
-                    <div className="w-64 bg-white border-r flex flex-col">
-                        <div className="p-4 gradient text-white">
-                            <h1 className="font-bold text-xl mb-1">Toro Chat</h1>
-                            <p className="text-sm">@{currentUser?.username}</p>
+            const UserCard = ({ user, onAddFriend, isFriend }) => (
+                <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                            <span className="text-red-500 text-lg">
+                                {user.username[0].toUpperCase()}
+                            </span>
                         </div>
-
-                        <div className="p-4 border-b">
-                            <form onSubmit={handleAddFriend}>
-                                <input
-                                    type="text"
-                                    value={newFriendUsername}
-                                    onChange={(e) => setNewFriendUsername(e.target.value)}
-                                    placeholder="Add friend by username"
-                                    className="w-full p-2 border rounded mb-2"
-                                />
-                                <button
-                                    type="submit"
-                                    className="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600"
-                                >
-                                    Add Friend
-                                </button>
-                            </form>
-                            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+                        <div>
+                            <p className="font-bold text-lg">@{user.username}</p>
+                            <p className="text-sm text-gray-500">
+                                Joined {new Date(user.createdAt).toLocaleDateString()}
+                            </p>
                         </div>
+                    </div>
+                    {!isFriend && (
+                        <button
+                            onClick={() => onAddFriend(user.id)}
+                            className="bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 transition-colors"
+                        >
+                            Add Friend
+                        </button>
+                    )}
+                </div>
+            );
 
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {friends.map(friend => (
+            if (view === 'chat') {
+                return (
+                    <div className="h-screen flex">
+                        {/* Sidebar */}
+                        <div className="w-72 bg-white border-r flex flex-col">
+                            <div className="p-4 gradient text-white">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                        {currentUser.username[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <h1 className="font-bold text-xl">Toro Chat</h1>
+                                        <p className="text-sm">@{currentUser?.username}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Friends List */}
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="p-4 border-b">
+                                    <button
+                                        onClick={() => setView('users')}
+                                        className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 flex items-center justify-center space-x-2"
+                                    >
+                                        <i className="fas fa-user-plus"></i>
+                                        <span>Add New Friends</span>
+                                    </button>
+                                </div>
+
+                                <div className="p-4">
+                                    <h2 className="text-sm font-semibold text-gray-500 mb-4">FRIENDS ({friends.length})</h2>
+                                    <div className="space-y-2">
+                                        {friends.map(friend => (
+                                            <button
+                                                key={friend.id}
+                                                onClick={() => {
+                                                    setActiveChat(friend.chatId);
+                                                    loadMessages(friend.chatId);
+                                                }}
+                                                className={`w-full p-3 rounded-lg text-left hover:bg-gray-50 transition-colors flex items-center space-x-3
+                                                    ${friend.chatId === activeChat ? 'bg-red-50 text-red-500' : ''}
+                                                `}
+                                            >
+                                                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                                    {friend.username[0].toUpperCase()}
+                                                </div>
+                                                <span>@{friend.username}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 border-t">
                                 <button
-                                    key={friend.id}
-                                    onClick={() => {
-                                        setActiveChat(friend.chatId);
-                                        loadMessages(friend.chatId);
-                                    }}
-                                    className={`w-full p-3 rounded mb-2 text-left hover:bg-gray-50 ${
-                                        friend.chatId === activeChat ? 'bg-red-50' : ''
-                                    }`}
+                                    onClick={handleLogout}
+                                    className="w-full text-red-500 hover:text-red-600 flex items-center justify-center space-x-2"
                                 >
-                                    @{friend.username}
+                                    <i className="fas fa-sign-out-alt"></i>
+                                    <span>Logout</span>
                                 </button>
-                            ))}
-                            <div className="p-3 rounded mb-2 text-left hover:bg-gray-50 cursor-pointer" onClick={handleViewAllUsers}>
-                                View All Users
                             </div>
                         </div>
 
-                        <div className="p-4 border-t">
-                            <button
-                                onClick={handleLogout}
-                                className="w-full text-red-500 hover:text-red-600"
-                            >
-                                Logout
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Chat Area */}
-                    <div className="flex-1 flex flex-col bg-gray-50">
-                        {activeChat ? (
-                            <>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {messages.map(message => (
-                                        <div
-                                            key={message.id}
-                                            className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
-                                        >
-                                            <div className={`max-w-[70%] p-3 rounded-lg ${
-                                                message.senderId === currentUser.id ? 'bg-red-500 text-white' : 'bg-white shadow'
-                                            }`}>
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <p className="font-bold text-sm">@{message.sender}</p>
-                                                    {message.senderId === currentUser.id && (
-                                                        <button
-                                                            onClick={() => handleDeleteMessage(message.id)}
-                                                            className="ml-2 text-sm opacity-75 hover:opacity-100"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <p>{message.text}</p>
-                                                <p className="text-xs opacity-75 mt-1">
-                                                    {new Date(message.timestamp).toLocaleTimeString()}
-                                                </p>
-                                            </div>
+                        {/* Main Content */}
+                        <div className="flex-1 flex flex-col bg-gray-50">
+                            {view === 'users' ? (
+                                <div className="flex-1 overflow-y-auto p-6">
+                                    <div className="max-w-3xl mx-auto">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-2xl font-bold">Add New Friends</h2>
+                                            <button
+                                                onClick={() => setView('chat')}
+                                                className="text-red-500 hover:text-red-600"
+                                            >
+                                                Back to Chat
+                                            </button>
                                         </div>
-                                    ))}
-                                    <div ref={messagesEndRef} />
-                                </div>
 
-                                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-                                    <div className="flex space-x-2">
-                                        <input
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
-                                            placeholder="Type a message..."
-                                            className="flex-1 p-2 border rounded-full"
-                                        />
+                                        <div className="mb-6">
+                                            <input
+                                                type="text"
+                                                placeholder="Search users..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="w-full p-3 border rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {filteredUsers.map(user => (
+                                                <UserCard
+                                                    key={user.id}
+                                                    user={user}
+                                                    onAddFriend={handleAddFriend}
+                                                    isFriend={friends.some(f => f.id === user.id)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : activeChat ? (
+                                <>
+                                    {/* Chat Header */}
+                                    <div className="bg-white border-b p-4">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="online-indicator"></div>
+                                            <p className="font-semibold">
+                                                {friends.find(f => f.chatId === activeChat)?.username}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Messages */}
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                        {messages.map(message => (
+                                            <div
+                                                key={message.id}
+                                                className={`flex ${message.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}
+                                            >
+                                                <div className={`message-bubble max-w-[70%] p-3 rounded-lg ${
+                                                    message.senderId === currentUser.id ? 'bg-red-500 text-white' : 'bg-white shadow'
+                                                }`}>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <p className="font-bold text-sm">@{message.sender}</p>
+                                                        {message.senderId === currentUser.id && (
+                                                            <button
+                                                                onClick={() => handleDeleteMessage(message.id)}
+                                                                className="ml-2 text-sm opacity-75 hover:opacity-100"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                )}
+                                                    </div>
+                                                    <p className="whitespace-pre-wrap break-words">{message.text}</p>
+                                                    <p className="text-xs opacity-75 mt-1">
+                                                        {new Date(message.timestamp).toLocaleTimeString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div ref={messagesEndRef} />
+                                    </div>
+
+                                    {/* Message Input */}
+                                    <form onSubmit={handleSendMessage} className="bg-white border-t p-4">
+                                        <div className="flex items-center space-x-2">
+                                            <div className="flex-1 relative">
+                                                <input
+                                                    type="text"
+                                                    value={newMessage}
+                                                    onChange={(e) => setNewMessage(e.target.value)}
+                                                    placeholder="Type a message..."
+                                                    className="w-full p-3 pr-10 border rounded-full bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                >
+                                                    <i className="fas fa-smile"></i>
+                                                </button>
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                className="bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 flex items-center space-x-2 transition-colors"
+                                                disabled={!newMessage.trim()}
+                                            >
+                                                <span>Send</span>
+                                                <i className="fas fa-paper-plane"></i>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </>
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center bg-gray-50">
+                                    <div className="text-center">
+                                        <div className="text-6xl mb-4">👋</div>
+                                        <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome to Toro Chat</h2>
+                                        <p className="text-gray-500 mb-6">Select a friend to start chatting or add new friends</p>
                                         <button
-                                            type="submit"
-                                            className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600"
+                                            onClick={() => setView('users')}
+                                            className="bg-red-500 text-white px-6 py-3 rounded-full hover:bg-red-600 inline-flex items-center space-x-2"
                                         >
-                                            Send
+                                            <i className="fas fa-user-plus"></i>
+                                            <span>Add New Friends</span>
                                         </button>
                                     </div>
-                                </form>
-                            </>
-                        ) : view === 'users' ? (
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {allUsers.map(user => (
-                                    <div key={user.id} className="bg-white rounded-lg shadow p-4 hover:bg-gray-50">
-                                        <p className="font-bold text-lg">@{user.username}</p>
-                                    </div>
-                                ))}
-                                <button
-                                    onClick={() => setView('chat')}
-                                    className="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600"
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            // Welcome/Login/Signup Screen
+            return (
+                <div className="min-h-screen gradient flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-6xl mb-4">🐂</div>
+                            <h1 className="text-4xl font-bold text-red-500 mb-2">TORO CHAT</h1>
+                            <p className="text-gray-500">Connect with friends instantly</p>
+                        </div>
+
+                        {view === 'welcome' ? (
+                            <div className="space-y-4">
+                                <button 
+                                    onClick={() => setView('signup')}
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 flex items-center justify-center space-x-2"
                                 >
-                                    Back to Chat
+                                    <i className="fas fa-user-plus"></i>
+                                    <span>Sign Up</span>
+                                </button>
+                                <button 
+                                    onClick={() => setView('login')}
+                                    className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white flex items-center justify-center space-x-2 transition-colors"
+                                >
+                                    <i className="fas fa-sign-in-alt"></i>
+                                    <span>Login</span>
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-500">
-                                Select a friend to start chatting
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className="min-h-screen gradient flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-                    <div className="text-center mb-8">
-                        <h1 className="text-4xl font-bold text-red-500 mb-2">TORO CHAT</h1>
-                        <p className="text-gray-500">Simple messaging app</p>
-                    </div>
-
-                    {view === 'welcome' ? (
-                        <div className="space-y-4">
-                            <button 
-                                onClick={() => setView('signup')}
-                                className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
-                            >
-                                Sign Up
-                            </button>
-                            <button 
-                                onClick={() => setView('login')}
-                                className="w-full border-2 border-red-500 text-red-500 p-4 rounded-lg hover:bg-red-500 hover:text-white"
-                            >
-                                Login
-                            </button>
-                        </div>
-                    ) : (
-                        <form onSubmit={view === 'login' ? handleLogin : handleSignup}>
-                            <div className="space-y-4">
+                            <form onSubmit={view === 'login' ? handleLogin : handleSignup} className="space-y-6">
                                 <div>
                                     <label className="block text-gray-700 mb-2">Username</label>
                                     <input
                                         type="text"
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border rounded-lg"
+                                        className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                                         placeholder="Enter your username"
+                                        required
                                     />
                                 </div>
                                 <div>
@@ -347,34 +479,43 @@
                                         type="password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border rounded-lg"
+                                        className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                                         placeholder="Enter your password"
+                                        required
                                     />
                                 </div>
-                                {error && <p className="text-red-500 text-sm">{error}</p>}
+                                {error && (
+                                    <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm">
+                                        {error}
+                                    </div>
+                                )}
                                 <button
                                     type="submit"
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600"
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 flex items-center justify-center space-x-2"
                                 >
-                                    {view === 'login' ? 'Login' : 'Sign Up'}
+                                    <i className={`fas fa-${view === 'login' ? 'sign-in-alt' : 'user-plus'}`}></i>
+                                    <span>{view === 'login' ? 'Login' : 'Sign Up'}</span>
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setView('welcome')}
-                                    className="w-full text-gray-500 hover:text-gray-700"
+                                    onClick={() => {
+                                        setView('welcome');
+                                        setError('');
+                                    }}
+                                    className="w-full text-gray-500 hover:text-gray-700 flex items-center justify-center space-x-2"
                                 >
-                                    Back
+                                    <i className="fas fa-arrow-left"></i>
+                                    <span>Back</span>
                                 </button>
-                            </div>
-                        </form>
-                    )}
+                            </form>
+                        )}
+                    </div>
                 </div>
-            </div>
-        );
-    }
+            );
+        }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-</script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
