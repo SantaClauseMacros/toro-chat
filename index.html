@@ -19,13 +19,18 @@
         .message-bubble:hover {
             transform: translateY(-2px);
         }
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background: #10B981;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
         function App() {
-            // State management
             const [users, setUsers] = React.useState([]);
             const [currentUser, setCurrentUser] = React.useState(null);
             const [friends, setFriends] = React.useState([]);
@@ -38,15 +43,56 @@
             const [activeChat, setActiveChat] = React.useState(null);
             const [error, setError] = React.useState('');
             const [searchTerm, setSearchTerm] = React.useState('');
+            const [lastUpdate, setLastUpdate] = React.useState(Date.now());
             const messagesEndRef = React.useRef(null);
 
-            // Load initial data
+            // Auto-refresh functionality
             React.useEffect(() => {
-                // Load users from localStorage
+                const intervals = [];
+                
+                if (view === 'chat') {
+                    // Update messages every second
+                    intervals.push(setInterval(() => {
+                        if (activeChat) {
+                            const savedMessages = localStorage.getItem(`chat_${activeChat}`);
+                            if (savedMessages) {
+                                setMessages(JSON.parse(savedMessages));
+                            }
+                        }
+                    }, 1000));
+
+                    // Update users list every 2 seconds
+                    intervals.push(setInterval(() => {
+                        const savedUsers = localStorage.getItem('users');
+                        if (savedUsers) {
+                            setUsers(JSON.parse(savedUsers));
+                        }
+                    }, 2000));
+
+                    // Update friends list every 2 seconds
+                    intervals.push(setInterval(() => {
+                        if (currentUser) {
+                            const savedFriends = localStorage.getItem(`friends_${currentUser.id}`);
+                            if (savedFriends) {
+                                setFriends(JSON.parse(savedFriends));
+                            }
+                        }
+                    }, 2000));
+
+                    // Update timestamp
+                    intervals.push(setInterval(() => {
+                        setLastUpdate(Date.now());
+                    }, 1000));
+                }
+
+                return () => intervals.forEach(interval => clearInterval(interval));
+            }, [view, activeChat, currentUser]);
+
+            // Initial load
+            React.useEffect(() => {
                 const storedUsers = JSON.parse(localStorage.getItem('users') || '[]');
                 setUsers(storedUsers);
 
-                // Check for logged in user
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {
                     const user = JSON.parse(savedUser);
@@ -61,6 +107,7 @@
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
 
+            // Load friends
             const loadFriends = (userId) => {
                 const savedFriends = localStorage.getItem(`friends_${userId}`);
                 if (savedFriends) {
@@ -68,6 +115,7 @@
                 }
             };
 
+            // Load messages
             const loadMessages = (chatId) => {
                 const savedMessages = localStorage.getItem(`chat_${chatId}`);
                 if (savedMessages) {
@@ -77,6 +125,7 @@
                 }
             };
 
+            // Handle signup
             const handleSignup = (e) => {
                 e.preventDefault();
                 if (!username.trim() || !password.trim()) {
@@ -108,6 +157,7 @@
                 setError('');
             };
 
+            // Handle login
             const handleLogin = (e) => {
                 e.preventDefault();
                 const user = users.find(u => 
@@ -126,6 +176,7 @@
                 }
             };
 
+            // Handle adding friend
             const handleAddFriend = (friendId) => {
                 const friend = users.find(u => u.id === friendId);
                 if (!friend) return;
@@ -153,6 +204,7 @@
                 setChatView('messages');
             };
 
+            // Handle sending message
             const handleSendMessage = (e) => {
                 e.preventDefault();
                 if (!newMessage.trim() || !activeChat) return;
@@ -171,12 +223,14 @@
                 setNewMessage('');
             };
 
+            // Handle message deletion
             const handleDeleteMessage = (messageId) => {
                 const updatedMessages = messages.filter(msg => msg.id !== messageId);
                 setMessages(updatedMessages);
                 localStorage.setItem(`chat_${activeChat}`, JSON.stringify(updatedMessages));
             };
 
+            // Handle logout
             const handleLogout = () => {
                 localStorage.removeItem('currentUser');
                 setCurrentUser(null);
@@ -187,11 +241,20 @@
                 setError('');
             };
 
+            // Filter users for search
             const filteredUsers = users.filter(user => 
                 user.id !== currentUser?.id &&
                 user.username.toLowerCase().includes(searchTerm.toLowerCase())
             );
 
+            // Debug info component
+            const renderDebugInfo = () => (
+                <div className="fixed bottom-2 right-2 text-xs text-gray-400">
+                    Last update: {new Date(lastUpdate).toLocaleTimeString()}
+                </div>
+            );
+
+// Main chat view
             if (view === 'chat') {
                 return (
                     <div className="h-screen flex">
@@ -204,7 +267,10 @@
                                     </div>
                                     <div>
                                         <h1 className="font-bold text-xl">Toro Chat</h1>
-                                        <p className="text-sm">@{currentUser?.username}</p>
+                                        <div className="flex items-center space-x-2">
+                                            <span className="online-dot"></span>
+                                            <p className="text-sm">@{currentUser?.username}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -358,7 +424,7 @@
                                             </button>
                                         </div>
                                     </form>
-                                    </>
+                                </>
                             ) : (
                                 <div className="flex-1 flex items-center justify-center">
                                     <div className="text-center">
@@ -375,11 +441,13 @@
                                     </div>
                                 </div>
                             )}
+                            {renderDebugInfo()}
                         </div>
                     </div>
                 );
             }
 
+// Welcome/Login/Signup Screen
             return (
                 <div className="min-h-screen gradient flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
@@ -393,7 +461,7 @@
                             <div className="space-y-4">
                                 <button 
                                     onClick={() => setView('signup')}
-                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 flex items-center justify-center space-x-2"
+                                    className="w-full bg-red-500 text-white p-4 rounded-lg hover:bg-red-600 flex items-center justify-center space-x-2 transition-colors"
                                 >
                                     <i className="fas fa-user-plus"></i>
                                     <span>Sign Up</span>
